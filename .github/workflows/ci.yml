@@ -44,15 +44,15 @@ jobs:
           cd ios
           # Clean any previous pod installation for fresh build
           rm -rf Pods Podfile.lock
-          # Update CocoaPods repo to get latest specs
-          pod repo update trunk
+          # Ensure CocoaPods specs are up to date
+          pod setup --silent || true
       - name: Build iOS app (Flutter, unsigned)
         run: |
           # Build the iOS app without code signing using xcodebuild to avoid Flutter's Development Team check
           flutter config --no-analytics
           cd ios
-          # Install pods with verbose output for debugging
-          pod install --verbose
+          # Install pods with repo update to fetch latest specs
+          pod install --repo-update
           # Workaround: Flutter's xcode_backend.sh expects base64-encoded DART_DEFINES on newer toolchains.
           # Generate a safe, minimal set matching our current config to avoid "Improperly formatted define flag".
           DART_DEFINES=$(python3 -c "import base64;defs=['DART_OBFUSCATION=false','TRACK_WIDGET_CREATION=true','TREE_SHAKE_ICONS=false','PACKAGE_CONFIG=.dart_tool/package_config.json'];print(','.join(base64.b64encode(s.encode()).decode() for s in defs))")
