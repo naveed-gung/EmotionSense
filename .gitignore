@@ -1,0 +1,44 @@
+# Flutter/Dart/Pub related
+**/doc/api/
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+flutter_*.png
+linked_*.ds
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+.DS_Store
+.macos/
+
+# Android related
+**/android/**/gradle-wrapper.jar
+**/android/.gradle/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+
+# iOS related
+**/ios/Flutter/.last_build_id
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# VS Code
+.history/
+
+# Assets generated
+assets/generated/
+
+# Large model/dataset files (too large for GitHub)
+assets/models/age_gender.csv
+assets/models/*.pkl
+# Note: TFLite models are now committed for CI/CD
+# assets/models/age_gender_ethnicity.tflite

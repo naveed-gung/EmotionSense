@@ -1,0 +1,45 @@
+name: emotion_sense
+description: On-device face emotion, age, and gender recognition (100% offline).
+publish_to: "none"
+
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  camera: ^0.11.3
+  tflite_flutter: ^0.11.0
+  google_mlkit_face_detection: ^0.13.1
+
+  provider: ^6.0.0
+
+  flutter_animate: ^4.5.0
+  google_fonts: ^6.0.0
+  audioplayers: ^5.2.1
+  photo_manager: ^3.2.1
+  flutter_slidable: ^3.0.1
+
+  shared_preferences: ^2.2.2
+  permission_handler: ^12.0.1
+  path_provider: ^2.1.5
+
+  intl: ^0.18.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  mockito: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/face_detection_short_range.tflite
+    - assets/models/model_lite_age_q.tflite
+    - assets/models/model_lite_gender_q.tflite
+    - assets/sounds/

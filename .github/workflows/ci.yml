@@ -1,0 +1,89 @@
+name: Flutter iOS Unsigned IPA
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: ios-unsigned-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-unsigned:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Flutter version
+        run: flutter --version
+      - name: Cache Xcode DerivedData
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-deriveddata-${{ hashFiles('ios/Podfile.lock') }}-${{ hashFiles('pubspec.lock') }}-${{ hashFiles('ios/Runner.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            ${{ runner.os }}-deriveddata-
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Build iOS app (Flutter, unsigned)
+        run: |
+          # Build the iOS app without code signing using xcodebuild to avoid Flutter's Development Team check
+          flutter config --no-analytics
+          cd ios
+          # Ensure pods are installed (cached runs are fast)
+          pod install --no-repo-update
+          # Workaround: Flutter's xcode_backend.sh expects base64-encoded DART_DEFINES on newer toolchains.
+          # Generate a safe, minimal set matching our current config to avoid "Improperly formatted define flag".
+          DART_DEFINES=$(python3 -c "import base64;defs=['DART_OBFUSCATION=false','TRACK_WIDGET_CREATION=true','TREE_SHAKE_ICONS=false','PACKAGE_CONFIG=.dart_tool/package_config.json'];print(','.join(base64.b64encode(s.encode()).decode() for s in defs))")
+          # Build the app for generic iOS device without code signing
+          set -o pipefail
+          xcodebuild \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ../build/ios \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY=\"\" \
+            DEVELOPMENT_TEAM=\"\" \
+            PROVISIONING_PROFILE_SPECIFIER=\"\" \
+            PROVISIONING_PROFILE=\"\" \
+            DART_DEFINES="$DART_DEFINES" \
+            | sed -e 's/\r$//'
+      - name: Package unsigned IPA
+        run: |
+          # The .app is produced by xcodebuild in DerivedData Products
+          APP_PATH="build/ios/Build/Products/Release-iphoneos/Runner.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Runner.app not found at $APP_PATH"
+            echo "Searching for .app files:"
+            find build -name "*.app" 2>/dev/null || true
+            exit 1
+          fi
+          mkdir -p build/ios/Payload
+          cp -R "$APP_PATH" build/ios/Payload/
+          cd build/ios
+          zip -r Runner-unsigned.ipa Payload > /dev/null
+          rm -rf Payload
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Runner-unsigned.ipa
+          path: build/ios/Runner-unsigned.ipa
