@@ -39,7 +39,7 @@ EmotionSense is a real-time facial analysis application that processes camera fe
 
 - Flutter SDK 3.0+
 - Dart 3.0+
-- Android SDK 21+ or iOS 12+
+- Android SDK 21+ or iOS 15.0+
 
 ### Installation
 
