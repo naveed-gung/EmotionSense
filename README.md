@@ -33,13 +33,87 @@ EmotionSense is a real-time facial analysis application that processes camera fe
 
 ---
 
+## <img src="https://cdn-icons-png.flaticon.com/512/3281/3281307.png" width="24" align="center"/> Tech Stack
+
+### Core Framework
+
+<table>
+<tr>
+<td align="center" width="140">
+<img src="https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white" alt="Flutter"/><br/>
+<b>Flutter</b><br/>
+<sub>Cross-platform UI framework</sub>
+</td>
+<td align="center" width="140">
+<img src="https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white" alt="Dart"/><br/>
+<b>Dart</b><br/>
+<sub>Programming language</sub>
+</td>
+</tr>
+</table>
+
+### Machine Learning
+
+<table>
+<tr>
+<td align="center" width="140">
+<img src="https://img.shields.io/badge/TensorFlow_Lite-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white" alt="TensorFlow Lite"/><br/>
+<b>TensorFlow Lite</b><br/>
+<sub>Age/Gender models</sub>
+</td>
+<td align="center" width="140">
+<img src="https://img.shields.io/badge/Google_ML_Kit-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="ML Kit"/><br/>
+<b>Google ML Kit</b><br/>
+<sub>Face detection</sub>
+</td>
+</tr>
+</table>
+
+### Key Dependencies
+
+| Package                       | Purpose                                       | Version |
+| ----------------------------- | --------------------------------------------- | ------- |
+| `google_mlkit_face_detection` | Real-time face detection & emotion analysis   | ^0.13.1 |
+| `tflite_flutter`              | TensorFlow Lite runtime for age/gender models | ^0.11.0 |
+| `camera`                      | Camera access & frame capture                 | ^0.11.0 |
+| `provider`                    | State management                              | ^6.0.0  |
+| `image`                       | Image processing & manipulation               | ^4.0.0  |
+| `permission_handler`          | Runtime permissions (camera/microphone)       | ^11.0.0 |
+| `photo_manager`               | Photo gallery management                      | ^3.7.1  |
+| `audioplayers`                | Sound effects & audio feedback                | ^5.2.1  |
+
+### Platform Support
+
+<table>
+<tr>
+<td align="center" width="100">
+<img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android"/><br/>
+<b>Android</b><br/>
+<sub>API 21+</sub>
+</td>
+<td align="center" width="100">
+<img src="https://img.shields.io/badge/iOS-000000?style=for-the-badge&logo=ios&logoColor=white" alt="iOS"/><br/>
+<b>iOS</b><br/>
+<sub>16.0+</sub>
+</td>
+</tr>
+</table>
+
+### Development Tools
+
+- **CI/CD:** GitHub Actions (automated IPA builds)
+- **Build System:** Gradle (Android), Xcode (iOS), CocoaPods
+- **Version Control:** Git
+
+---
+
 ## <img src="https://cdn-icons-png.flaticon.com/512/1087/1087815.png" width="24" align="center"/> Getting Started
 
 ### Prerequisites
 
 - Flutter SDK 3.0+
 - Dart 3.0+
-- Android SDK 21+ or iOS 15.0+
+- Android SDK 21+ or iOS 16.0+
 
 ### Installation
 
