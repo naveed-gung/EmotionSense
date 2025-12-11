@@ -1,6 +1,6 @@
 # Uncomment this line to define a global platform for your project
-# iOS 13.0+ required for Google ML Kit and TensorFlow Lite dependencies
-platform :ios, '13.0'
+# iOS 15.0+ required for Google ML Kit and TensorFlow Lite dependencies
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -46,7 +46,7 @@ post_install do |installer|
 
       # Force a minimum iOS deployment target for all Pods to silence warnings
       # and ensure consistency with the project's platform setting above.
-      min_target = '13.0'
+      min_target = '15.0'
       current = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
       if current.nil? || current.to_f < min_target.to_f
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = min_target
