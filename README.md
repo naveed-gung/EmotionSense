@@ -14,21 +14,21 @@
 
 ---
 
-## <img src="assets/icons/overview.svg" width="24" align="center"/> Overview
+## <img src="assets/icons/overview.svg" width="24" align="center" alt="Overview"/> Overview
 
 EmotionSense is a real-time facial analysis application that processes camera feed to detect emotions, estimate age, and identify gender. All processing occurs on-device with no data transmission, ensuring complete privacy.
 
 ### Key Capabilities
 
-- <img src="assets/icons/emotion.svg" width="18" align="center"/> **Real-Time Emotion Detection** - Detects 7 emotions (Happy, Sad, Angry, Surprised, Disgusted, Fearful, Neutral) with temporal smoothing
-- <img src="assets/icons/age.svg" width="18" align="center"/> **Age Estimation** - Quantized TensorFlow Lite model for age prediction
-- <img src="assets/icons/gender.svg" width="18" align="center"/> **Gender Detection** - Binary classification with probability-based thresholding
-- <img src="assets/icons/privacy.svg" width="18" align="center"/> **Privacy-First Architecture** - 100% on-device processing with no network requests
-- <img src="assets/icons/smoothing.svg" width="18" align="center"/> **Temporal Smoothing** - 8-frame history with median/majority voting to reduce prediction flickering
+- <img src="assets/icons/emotion.svg" width="18" align="center" alt="Emotion Detection"/> **Real-Time Emotion Detection** - Detects 7 emotions (Happy, Sad, Angry, Surprised, Disgusted, Fearful, Neutral) with temporal smoothing
+- <img src="assets/icons/age.svg" width="18" align="center" alt="Age Estimation"/> **Age Estimation** - Quantized TensorFlow Lite model for age prediction
+- <img src="assets/icons/gender.svg" width="18" align="center" alt="Gender Detection"/> **Gender Detection** - Binary classification with probability-based thresholding
+- <img src="assets/icons/privacy.svg" width="18" align="center" alt="Privacy"/> **Privacy-First Architecture** - 100% on-device processing with no network requests
+- <img src="assets/icons/smoothing.svg" width="18" align="center" alt="Temporal Smoothing"/> **Temporal Smoothing** - 8-frame history with median/majority voting to reduce prediction flickering
 
 ---
 
-## <img src="assets/icons/tech.svg" width="24" align="center"/> Tech Stack
+## <img src="assets/icons/tech.svg" width="24" align="center" alt="Technology"/> Tech Stack
 
 ### Core Framework
 
@@ -102,7 +102,7 @@ EmotionSense is a real-time facial analysis application that processes camera fe
 
 ---
 
-## <img src="assets/icons/getting-started.svg" width="24" align="center"/> Getting Started
+## <img src="assets/icons/getting-started.svg" width="24" align="center" alt="Getting Started"/> Getting Started
 
 ### Prerequisites
 
@@ -141,7 +141,7 @@ flutter run -d <device-id>
 
 ---
 
-## <img src="assets/icons/architecture.svg" width="24" align="center"/> Architecture
+## <img src="assets/icons/architecture.svg" width="24" align="center" alt="Architecture"/> Architecture
 
 ### ML Pipeline
 
@@ -161,15 +161,15 @@ Camera Frame → ML Kit Face Detection → Face Bounding Box
 
 Utilizes **Google ML Kit Face Detection** with multi-factor analysis:
 
-| Emotion                                                                 | Detection Criteria                |
-| ----------------------------------------------------------------------- | --------------------------------- |
-| <img src="assets/icons/happy.svg" width="16"/> **Happy**               | `smilingProbability > 0.70`       |
-| <img src="assets/icons/sad.svg" width="16"/> **Sad**                   | `smilingProbability < 0.30`       |
-| <img src="assets/icons/neutral.svg" width="16"/> **Neutral**           | `smilingProbability 0.30-0.70`    |
-| <img src="assets/icons/surprised.svg" width="16"/> **Surprised**       | Eyes wide open + mouth open       |
-| <img src="assets/icons/angry.svg" width="16"/> **Angry**               | Low smile + specific eye patterns |
-| <img src="assets/icons/disgusted.svg" width="16"/> **Disgusted**       | Face contortion detection         |
-| <img src="assets/icons/fearful.svg" width="16"/> **Fearful**           | Wide eyes + low smile             |
+| Emotion                                                                               | Detection Criteria                |
+| ------------------------------------------------------------------------------------- | --------------------------------- |
+| <img src="assets/icons/happy.svg" width="16" alt="Happy"/> **Happy**                 | `smilingProbability > 0.70`       |
+| <img src="assets/icons/sad.svg" width="16" alt="Sad"/> **Sad**                       | `smilingProbability < 0.30`       |
+| <img src="assets/icons/neutral.svg" width="16" alt="Neutral"/> **Neutral**           | `smilingProbability 0.30-0.70`    |
+| <img src="assets/icons/surprised.svg" width="16" alt="Surprised"/> **Surprised**     | Eyes wide open + mouth open       |
+| <img src="assets/icons/angry.svg" width="16" alt="Angry"/> **Angry**                 | Low smile + specific eye patterns |
+| <img src="assets/icons/disgusted.svg" width="16" alt="Disgusted"/> **Disgusted**     | Face contortion detection         |
+| <img src="assets/icons/fearful.svg" width="16" alt="Fearful"/> **Fearful**           | Wide eyes + low smile             |
 
 **Smoothing:** 5-frame history with majority voting to prevent jitter
 
@@ -196,7 +196,7 @@ lib/
 
 ---
 
-## <img src="assets/icons/tech.svg" width="24" align="center"/> Technical Specifications
+## <img src="assets/icons/tech.svg" width="24" align="center" alt="Technical Specifications"/> Technical Specifications
 
 ### Models
 
@@ -218,30 +218,30 @@ lib/
 
 ---
 
-## <img src="assets/icons/privacy.svg" width="24" align="center"/> Privacy & Security
+## <img src="assets/icons/privacy.svg" width="24" align="center" alt="Privacy and Security"/> Privacy & Security
 
 <table>
 <tr>
-<td><img src="assets/icons/on-device.svg" width="24"/></td>
+<td><img src="assets/icons/on-device.svg" width="24" alt="On-Device Processing"/></td>
 <td><b>100% On-Device Processing</b><br/>All ML inference runs locally</td>
 </tr>
 <tr>
-<td><img src="assets/icons/no-network.svg" width="24"/></td>
+<td><img src="assets/icons/no-network.svg" width="24" alt="No Network Requests"/></td>
 <td><b>No Network Requests</b><br/>Zero data transmission to external servers</td>
 </tr>
 <tr>
-<td><img src="assets/icons/no-analytics.svg" width="24"/></td>
+<td><img src="assets/icons/no-analytics.svg" width="24" alt="No Analytics or Telemetry"/></td>
 <td><b>No Analytics/Telemetry</b><br/>No user tracking or behavior analysis</td>
 </tr>
 <tr>
-<td><img src="assets/icons/local-storage.svg" width="24"/></td>
+<td><img src="assets/icons/local-storage.svg" width="24" alt="Local Storage Only"/></td>
 <td><b>Local Storage Only</b><br/>Photos saved locally with user consent</td>
 </tr>
 </table>
 
 ---
 
-## <img src="assets/icons/tech.svg" width="24" align="center"/> Performance
+## <img src="assets/icons/tech.svg" width="24" align="center" alt="Performance"/> Performance
 
 - **Processing Speed:** ~10-15 FPS on modern devices
 - **Latency:** <100ms per frame (detection + inference)
@@ -249,7 +249,7 @@ lib/
 
 ---
 
-## <img src="assets/icons/build.svg" width="24" align="center"/> Build & Deployment
+## <img src="assets/icons/build.svg" width="24" align="center" alt="Build and Deployment"/> Build & Deployment
 
 ### Android
 
@@ -271,13 +271,13 @@ flutter build ios --release
 flutter build ios --release --no-codesign
 ```
 
-### <img src="assets/icons/github.svg" width="20" align="center"/> Automated CI/CD
+### <img src="assets/icons/github.svg" width="20" align="center" alt="GitHub Actions"/> Automated CI/CD
 
 This project includes a **pre-configured GitHub Actions workflow** for automated iOS IPA generation:
 
-- <img src="assets/icons/automated-build.svg" width="16" align="center"/> **Automated IPA Builds** - GitHub workflow automatically generates unsigned IPA on push/release
-- <img src="assets/icons/trollstore.svg" width="16" align="center"/> **TrollStore Compatible** - Ready for TrollStore permanent installation (iOS 14.0-16.6.1)
-- <img src="assets/icons/sideload.svg" width="16" align="center"/> **Sideloading Ready** - Works with AltStore, Sideloadly, or any standard sideloading method
+- <img src="assets/icons/automated-build.svg" width="16" align="center" alt="Automated IPA Builds"/> **Automated IPA Builds** - GitHub workflow automatically generates unsigned IPA on push/release
+- <img src="assets/icons/trollstore.svg" width="16" align="center" alt="TrollStore Compatible"/> **TrollStore Compatible** - Ready for TrollStore permanent installation (iOS 14.0-16.6.1)
+- <img src="assets/icons/sideload.svg" width="16" align="center" alt="Sideloading Ready"/> **Sideloading Ready** - Works with AltStore, Sideloadly, or any standard sideloading method
 
 **Installation Options:**
 
@@ -289,7 +289,7 @@ Check the `.github/workflows/` directory for CI configuration details.
 
 ---
 
-## <img src="assets/icons/dependencies.svg" width="24" align="center"/> Dependencies
+## <img src="assets/icons/dependencies.svg" width="24" align="center" alt="Dependencies"/> Dependencies
 
 - `google_ml_kit_face_detection` - Face detection
 - `tflite_flutter` - TensorFlow Lite runtime
@@ -299,7 +299,7 @@ Check the `.github/workflows/` directory for CI configuration details.
 
 ---
 
-## <img src="assets/icons/license.svg" width="24" align="center"/> License
+## <img src="assets/icons/license.svg" width="24" align="center" alt="License"/> License
 
 MIT License - See [LICENSE](LICENSE) for details
 

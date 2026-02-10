@@ -42,3 +42,4 @@ assets/models/age_gender.csv
 assets/models/*.pkl
 # Note: TFLite models are now committed for CI/CD
 # assets/models/age_gender_ethnicity.tflite
+test_svg.html
