@@ -21,6 +21,10 @@ class SettingsRepository {
   static const _kSmileTh = 'smile_threshold';
   static const _kEyeOpenTh = 'eye_open_threshold';
   static const _kEthnicityEnabled = 'ethnicity_enabled';
+  static const _kHasSeenOnboarding = 'has_seen_onboarding';
+  static const _kModelMode = 'model_mode'; // 'accuracy' or 'speed'
+  static const _kAlertEmotion = 'alert_emotion'; // emotion name or empty
+  static const _kAlertThreshold = 'alert_threshold'; // 0.0..1.0
 
   Future<bool> getShowAgeGender() async =>
       (await SharedPreferences.getInstance()).getBool(_kShowAgeGender) ?? true;
@@ -133,4 +137,30 @@ class SettingsRepository {
       true; // Enabled by default
   Future<void> setEthnicityEnabled(bool v) async =>
       (await SharedPreferences.getInstance()).setBool(_kEthnicityEnabled, v);
+
+  // Onboarding
+  Future<bool> getHasSeenOnboarding() async =>
+      (await SharedPreferences.getInstance()).getBool(_kHasSeenOnboarding) ??
+      false;
+  Future<void> setHasSeenOnboarding(bool v) async =>
+      (await SharedPreferences.getInstance()).setBool(_kHasSeenOnboarding, v);
+
+  // Model mode (accuracy vs speed)
+  Future<String> getModelMode() async =>
+      (await SharedPreferences.getInstance()).getString(_kModelMode) ??
+      'accuracy';
+  Future<void> setModelMode(String v) async =>
+      (await SharedPreferences.getInstance()).setString(_kModelMode, v);
+
+  // Emotion alert settings
+  Future<String> getAlertEmotion() async =>
+      (await SharedPreferences.getInstance()).getString(_kAlertEmotion) ?? '';
+  Future<void> setAlertEmotion(String v) async =>
+      (await SharedPreferences.getInstance()).setString(_kAlertEmotion, v);
+
+  Future<double> getAlertThreshold() async =>
+      (await SharedPreferences.getInstance()).getDouble(_kAlertThreshold) ??
+      0.7;
+  Future<void> setAlertThreshold(double v) async =>
+      (await SharedPreferences.getInstance()).setDouble(_kAlertThreshold, v);
 }

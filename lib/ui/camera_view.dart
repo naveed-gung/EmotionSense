@@ -1,21 +1,19 @@
+import 'dart:io';
 import 'package:camera/camera.dart';
+import 'package:emotion_sense/app.dart';
+import 'package:emotion_sense/core/constants/emotions.dart';
 import 'package:emotion_sense/presentation/providers/camera_provider.dart';
 import 'package:emotion_sense/presentation/providers/face_attributes_provider.dart';
-import 'package:emotion_sense/core/constants/emotions.dart';
-import 'package:emotion_sense/presentation/widgets/camera_preview_widget.dart';
-import 'package:emotion_sense/presentation/screens/history_screen.dart';
+import 'package:emotion_sense/presentation/providers/settings_provider.dart';
+import 'package:emotion_sense/presentation/screens/analysis_result_screen.dart';
+import 'package:emotion_sense/presentation/screens/comparison_screen.dart';
+import 'package:emotion_sense/presentation/screens/performance_dashboard_screen.dart';
 import 'package:emotion_sense/presentation/screens/settings_screen.dart';
-import 'package:emotion_sense/data/models/age_gender_data.dart';
-import 'package:emotion_sense/utils/image_annotation.dart';
-// Photos saving intentionally removed to avoid extra permissions
+import 'package:emotion_sense/presentation/widgets/emoji_rain_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:emotion_sense/presentation/providers/history_provider.dart';
-import 'dart:io';
-import 'package:photo_manager/photo_manager.dart';
-import 'package:emotion_sense/presentation/widgets/morphing_emoji.dart';
 
-/// New entry view: shows camera preview with space reserved at bottom for controls/labels.
+/// Main camera view matching the dark UI design.
 class CameraView extends StatefulWidget {
   const CameraView({super.key});
 
@@ -24,78 +22,44 @@ class CameraView extends StatefulWidget {
 }
 
 class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
+  FaceAttributesProvider? _attrs;
+  bool _privacyMode = true;
+  bool _isCapturing = false;
+  String? _alertMessage;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final cam = context.read<CameraProvider>();
-
-      // Initialize camera first
       await cam.initialize();
 
-      // Now create and start face detection
       final attrs = FaceAttributesProvider(cam.service);
       _attrs = attrs;
+
+      // Wire emotion alert callback
+      _attrs!.onEmotionAlert = (emotion, confidence, faceIndex) {
+        if (!mounted) return;
+        setState(() {
+          _alertMessage =
+              '${emotion.emoji} ${emotion.label} detected (${(confidence * 100).toInt()}%)';
+        });
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) setState(() => _alertMessage = null);
+        });
+      };
+
+      // Configure alert from settings
+      final settings = context.read<SettingsProvider>();
+      _configureAlertFromSettings(settings);
+
       _attrs!.addListener(() {
         if (mounted) setState(() {});
       });
-
-      // Start face detection (this starts the image stream)
       await _attrs!.start();
-
       if (mounted) setState(() {});
     });
-  }
-
-  FaceAttributesProvider? _attrs;
-
-  /// Saves the captured image to Photos/Gallery with face data annotations
-  /// If faceData is provided, it will draw bounding box, emotion, age, gender, ethnicity on the image
-  Future<void> _saveToPhotos(String path,
-      {FaceAttributes? faceData, required Size imageSize}) async {
-    // Run in separate isolate-like context to prevent crashes
-    await Future.delayed(const Duration(milliseconds: 100));
-
-    try {
-      // Request permission first
-      final perm = await PhotoManager.requestPermissionExtend();
-      if (!perm.isAuth) {
-        debugPrint('⚠️ Photo library permission denied');
-        return; // user denied
-      }
-
-      final file = File(path);
-      if (!await file.exists()) {
-        debugPrint('⚠️ Image file not found: $path');
-        return;
-      }
-
-      // Critical: Add longer delay on iOS to ensure camera is fully released
-      if (Platform.isIOS) {
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-
-      // Annotate image with face data if available
-      final bytes = faceData != null
-          ? await ImageAnnotation.annotateImage(
-              imagePath: path,
-              faceData: faceData,
-              imageSize: imageSize,
-            )
-          : await file.readAsBytes();
-
-      final title = path.split(Platform.pathSeparator).last;
-
-      // Save annotated image with proper error handling
-      await PhotoManager.editor.saveImage(bytes, title: title, filename: title);
-      debugPrint(
-          '✅ Image saved to Photos: $title ${faceData != null ? '(annotated)' : ''}');
-    } catch (e, stackTrace) {
-      // Log the error but don't crash the app
-      debugPrint('⚠️ Failed to save to Photos: $e');
-      debugPrint('Stack trace: $stackTrace');
-    }
   }
 
   @override
@@ -108,283 +72,317 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // Pause/resume face detection based on app state to prevent iOS crashes
     if (_attrs == null) return;
-
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
       case AppLifecycleState.detached:
-        // Stop processing when app goes to background
+      case AppLifecycleState.hidden:
         _attrs?.stop();
         break;
       case AppLifecycleState.resumed:
-        // Resume processing when app comes to foreground
         _attrs?.start();
         break;
-      case AppLifecycleState.hidden:
-        // On newer Flutter versions
-        _attrs?.stop();
-        break;
+    }
+  }
+
+  void _configureAlertFromSettings(SettingsProvider settings) {
+    final alertEmotionName = settings.alertEmotion;
+    if (alertEmotionName.isEmpty) {
+      _attrs?.setEmotionAlert(null, 0);
+      return;
+    }
+    final emotionMap = {
+      'Happy': Emotion.happy,
+      'Sad': Emotion.sad,
+      'Angry': Emotion.angry,
+      'Surprised': Emotion.surprised,
+      'Neutral': Emotion.neutral,
+    };
+    final emotion = emotionMap[alertEmotionName];
+    _attrs?.setEmotionAlert(emotion, settings.alertThreshold);
+  }
+
+  Future<void> _handleCapture() async {
+    if (_isCapturing) return;
+    final camera = context.read<CameraProvider>();
+    if (camera.controller == null) return;
+
+    setState(() => _isCapturing = true);
+
+    try {
+      // Stop stream to avoid camera conflicts
+      try {
+        await _attrs?.stop();
+      } catch (_) {}
+      await Future.delayed(const Duration(milliseconds: 80));
+
+      final img = await camera.controller!.takePicture();
+      final faces = _attrs?.faces ?? [];
+
+      final imageSize = Size(
+        camera.controller!.value.previewSize?.height ?? 1920,
+        camera.controller!.value.previewSize?.width ?? 1080,
+      );
+
+      if (!mounted) return;
+
+      if (faces.isNotEmpty) {
+        final face = faces.first;
+        // Navigate to analysis result screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AnalysisResultScreen(
+              imagePath: img.path,
+              faceData: face,
+              imageSize: imageSize,
+            ),
+          ),
+        );
+      } else {
+        // No face detected — show quick snackbar
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('No face detected. Try again.'),
+            backgroundColor: AppColors.surface,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Resume detection
+      await Future.delayed(Duration(milliseconds: Platform.isIOS ? 500 : 350));
+      if (!mounted) return;
+      try {
+        await _attrs?.start();
+      } catch (_) {}
+    } catch (e) {
+      debugPrint('Capture error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+      try {
+        await _attrs?.start();
+      } catch (_) {}
+    } finally {
+      if (mounted) setState(() => _isCapturing = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final camera = context.watch<CameraProvider>();
-    // Settings no longer gate age/gender/ethnicity display here
-    final history = context.watch<HistoryProvider>();
-    // Use internal _attrs instance for overlays instead of watching provider (which we never added to tree)
     final faces = _attrs?.faces ?? const <FaceAttributes>[];
 
-    // Debug: print face count
-    if (faces.isNotEmpty) {
-      debugPrint(
-          '✅ Detected ${faces.length} face(s) - Emotion: ${faces.first.emotion}');
-    }
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('EmotionSense'),
-        actions: [
-          IconButton(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const HistoryScreen()),
-            ),
-            icon: const Icon(Icons.history),
-          ),
-          IconButton(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
-            icon: const Icon(Icons.settings),
-          ),
-        ],
-      ),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            // Camera preview with overlay (larger height - 65%)
+            // Top bar: Settings | Privacy | Flash
+            _buildTopBar(camera),
+
+            // Camera preview with overlays
             Expanded(
-              flex: 65,
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    CameraPreviewWidget(controller: camera.controller),
-                    // Face detection overlay with bounding boxes
-                    if (_attrs != null) _FaceBoxesOverlay(provider: _attrs!),
+                    // Camera preview
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: camera.controller != null && camera.isInitialized
+                          ? CameraPreview(camera.controller!)
+                          : Container(
+                              color: AppColors.surface,
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                    ),
 
-                    // TOP-CENTER: Real-time morphing emoji avatar (always visible, default neutral)
-                    Positioned(
-                      top: 16,
-                      left: 0,
-                      right: 0,
-                      child: Center(
-                        child: MorphingEmoji(
-                          emotion: faces.isNotEmpty
-                              ? faces.first.emotion
-                              : Emotion
-                                  .neutral, // Default to neutral when no face
-                          size: 120,
-                          showFaceCircle: true,
+                    // Face bounding box overlay (blue corner brackets)
+                    if (_attrs != null)
+                      _FaceCornerBracketOverlay(provider: _attrs!),
+
+                    // Per-face floating labels (emoji + emotion + info)
+                    if (_attrs != null) _FaceLabelsOverlay(faces: faces),
+
+                    // Emoji rain particle effect
+                    if (faces.isNotEmpty)
+                      EmojiRainWidget(
+                        emotion: faces.first.emotion,
+                        intensity: faces.first.confidence,
+                        enabled: true,
+                      ),
+
+                    // Alert banner
+                    if (_alertMessage != null)
+                      Positioned(
+                        top: 12,
+                        left: 12,
+                        right: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: AppColors.danger.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.notifications_active_rounded,
+                                  color: Colors.white, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _alertMessage!,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
 
-                    // BOTTOM-RIGHT: Age/Gender/Ethnicity capsule (always visible)
-                    Positioned(
-                      bottom: 16,
-                      right: 16,
-                      child: _AgeGenderEthnicityCard(
-                        face: faces.isNotEmpty ? faces.first : null,
+                    // Face count badge (when >1 face)
+                    if (faces.length > 1)
+                      Positioned(
+                        top: 12,
+                        left: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.people_rounded,
+                                  color: Colors.white, size: 14),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${faces.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+
+                    // Stats panel (bottom-left)
+                    if (_attrs != null)
+                      Positioned(
+                        bottom: 16,
+                        left: 16,
+                        child: GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  PerformanceDashboardScreen(provider: _attrs!),
+                            ),
+                          ),
+                          child: _StatsPanel(
+                            fps: _attrs!.currentFps,
+                            latency: _attrs!.lastLatencyMs,
+                          ),
+                        ),
+                      ),
+
+                    // Comparison mode button (bottom-right, when >=2 faces)
+                    if (faces.length >= 2)
+                      Positioned(
+                        bottom: 16,
+                        right: 16,
+                        child: GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ComparisonScreen(
+                                face1: faces[0],
+                                face2: faces[1],
+                              ),
+                            ),
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.overlay,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color:
+                                      AppColors.primary.withValues(alpha: 0.5),
+                                  width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.compare_arrows_rounded,
+                                    color: AppColors.primary, size: 16),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'COMPARE',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // Emotion confidence bars (right edge)
+                    if (faces.isNotEmpty)
+                      Positioned(
+                        right: 8,
+                        top: 80,
+                        bottom: 80,
+                        child: _EmotionBars(face: faces.first),
+                      ),
                   ],
                 ),
               ),
             ),
-            // Control buttons row (fixed height)
-            Container(
-              height: 80,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  // Left: switch camera
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton.filled(
-                        onPressed: () async {
-                          await camera.toggleCamera();
-                        },
-                        icon: Icon(
-                          camera.isFront
-                              ? Icons.cameraswitch
-                              : Icons.cameraswitch_outlined,
-                        ),
-                        tooltip: 'Switch camera',
-                      ),
-                    ),
-                  ),
-                  // Center: capture button
-                  Expanded(
-                    child: Center(
-                      child: FilledButton.icon(
-                        onPressed: () async {
-                          if (camera.controller == null) return;
-                          try {
-                            // Temporarily stop streaming/processing to avoid camera crashes on capture
-                            try {
-                              await _attrs?.stop();
-                            } catch (e) {
-                              debugPrint('⚠️ Error stopping attributes: $e');
-                            }
-                            // Allow the camera to settle after stopping the stream (iOS race-condition fix)
-                            await Future.delayed(
-                                const Duration(milliseconds: 80));
-                            final img = await camera.controller!.takePicture();
 
-                            // Get camera image size for annotation
-                            final imageSize = Size(
-                              camera.controller!.value.previewSize?.height ??
-                                  1920,
-                              camera.controller!.value.previewSize?.width ??
-                                  1080,
-                            );
+            const SizedBox(height: 12),
 
-                            if (faces.isNotEmpty) {
-                              final face = faces.first;
-                              final ageGenderData = AgeGenderData(
-                                ageRange: face.ageRange,
-                                gender: face.gender,
-                                confidence: face.confidence,
-                              );
-                              final savedPath = await history.addCapture(
-                                imagePath: img.path,
-                                emotion: face.emotion,
-                                confidence: face.confidence,
-                                ageGender: ageGenderData,
-                              );
-                              // Save to Photos/Gallery with face data annotations
-                              // Don't await to prevent blocking the UI
-                              Future.microtask(() => _saveToPhotos(
-                                    savedPath,
-                                    faceData: face,
-                                    imageSize: imageSize,
-                                  ));
-                            } else {
-                              // Save neutral placeholder entry even if no face
-                              final savedPath = await history.addCapture(
-                                imagePath: img.path,
-                                emotion: Emotion.neutral,
-                                confidence: 0.0,
-                                ageGender: null,
-                              );
-                              Future.microtask(() => _saveToPhotos(
-                                    savedPath,
-                                    imageSize: imageSize,
-                                  ));
-                            }
+            // Bottom controls: Gallery | Shutter | Flip
+            _buildBottomControls(camera),
 
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Captured!'),
-                                  duration: Duration(seconds: 1),
-                                ),
-                              );
-                            }
-                            // Resume detection stream after capture
-                            // Add a longer delay on iOS to avoid race conditions with photo save
-                            await Future.delayed(Duration(
-                                milliseconds: Platform.isIOS ? 500 : 350));
-                            if (!mounted) return;
-                            try {
-                              await _attrs?.start();
-                            } catch (e) {
-                              debugPrint('⚠️ Error restarting attributes: $e');
-                            }
-                          } catch (e, stackTrace) {
-                            debugPrint('❌ Capture error: $e');
-                            debugPrint('Stack trace: $stackTrace');
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Error: $e')),
-                              );
-                            }
-                            // Attempt to resume stream on error as well
-                            try {
-                              await _attrs?.start();
-                            } catch (e) {
-                              debugPrint(
-                                  '⚠️ Error restarting attributes after error: $e');
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.camera_alt),
-                        label: const Text('Capture'),
-                        style: ButtonStyle(
-                          textStyle: WidgetStatePropertyAll(
-                            TextStyle(
-                              fontSize: Theme.of(context).platform ==
-                                      TargetPlatform.iOS
-                                  ? 13.0
-                                  : 14.0,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          padding: const WidgetStatePropertyAll(
-                            EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                          ),
-                          minimumSize: WidgetStatePropertyAll(
-                            Size(
-                              Theme.of(context).platform == TargetPlatform.iOS
-                                  ? 140
-                                  : 120,
-                              44,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Right: flash toggle
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Builder(builder: (context) {
-                        // CameraValue does not expose flashAvailable directly; assume flash unsupported on front camera
-                        final hasFlash = !(camera.isFront);
-                        return IconButton.filled(
-                          onPressed: (!camera.isInitialized || !hasFlash)
-                              ? null
-                              : () async {
-                                  final next = switch (camera.flash) {
-                                    FlashMode.off => FlashMode.torch,
-                                    FlashMode.torch => FlashMode.off,
-                                    _ => FlashMode.off,
-                                  };
-                                  await camera.setFlash(next);
-                                  if (mounted) setState(() {});
-                                },
-                          icon: Icon(
-                            (camera.flash == FlashMode.torch && hasFlash)
-                                ? Icons.flash_on
-                                : Icons.flash_off,
-                          ),
-                          tooltip:
-                              hasFlash ? 'Toggle flash' : 'Flash not available',
-                        );
-                      }),
-                    ),
-                  ),
-                ],
+            // Helper text
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16, top: 8),
+              child: Text(
+                'TAP SHUTTER TO ANALYZE',
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 2,
+                ),
               ),
             ),
           ],
@@ -392,64 +390,129 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
       ),
     );
   }
-}
 
-/// Professional single-row capsule with blackish transparent background
-class _AgeGenderEthnicityCard extends StatelessWidget {
-  const _AgeGenderEthnicityCard({
-    required this.face,
-  });
-  final FaceAttributes? face; // Now nullable
+  Widget _buildTopBar(CameraProvider camera) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Settings gear
+          _CircleIconButton(
+            icon: Icons.settings_rounded,
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+              // Reconfigure alerts after returning from settings
+              if (mounted && _attrs != null) {
+                _configureAlertFromSettings(context.read<SettingsProvider>());
+              }
+            },
+          ),
 
-  @override
-  Widget build(BuildContext context) {
-    final ethnicity = face?.ethnicity ?? '---';
-    final ageRange = face?.ageRange ?? '---';
-    final gender = face?.gender ?? '---';
+          // Privacy toggle pill
+          _PrivacyPill(
+            isOn: _privacyMode,
+            onToggle: () => setState(() => _privacyMode = !_privacyMode),
+          ),
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.7), // Blackish transparent
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.15),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+          // Flash toggle
+          _CircleIconButton(
+            icon: camera.flash == FlashMode.torch
+                ? Icons.flash_on_rounded
+                : Icons.flash_off_rounded,
+            onTap: (!camera.isInitialized || camera.isFront)
+                ? null
+                : () async {
+                    final next = camera.flash == FlashMode.off
+                        ? FlashMode.torch
+                        : FlashMode.off;
+                    await camera.setFlash(next);
+                    if (mounted) setState(() {});
+                  },
+            isActive: camera.flash == FlashMode.torch,
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    );
+  }
+
+  Widget _buildBottomControls(CameraProvider camera) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Age
-          _InfoItem(
-            icon: Icons.calendar_today_rounded,
-            text: ageRange,
-            iconColor: Colors.amber.shade400,
+          // Gallery thumbnail placeholder
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: AppColors.surface,
+              border: Border.all(color: AppColors.cardBorder, width: 1.5),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Icon(
+                Icons.photo_rounded,
+                color: AppColors.textTertiary,
+                size: 24,
+              ),
+            ),
           ),
-          const SizedBox(width: 16),
-          // Gender
-          _InfoItem(
-            icon: gender.toLowerCase() == 'male'
-                ? Icons.male_rounded
-                : gender.toLowerCase() == 'female'
-                    ? Icons.female_rounded
-                    : Icons.person_outline_rounded,
-            text: gender,
-            iconColor: Colors.blue.shade300,
+
+          // Shutter button
+          GestureDetector(
+            onTap: _isCapturing ? null : _handleCapture,
+            child: Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.textSecondary, width: 3),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Container(
+                  width: 62,
+                  height: 62,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _isCapturing ? AppColors.textTertiary : Colors.white,
+                  ),
+                  child: _isCapturing
+                      ? const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
+              ),
+            ),
           ),
-          const SizedBox(width: 16),
-          // Ethnicity
-          _InfoItem(
-            icon: Icons.public_rounded,
-            text: ethnicity,
-            iconColor: Colors.green.shade300,
+
+          // Camera flip button
+          _CircleIconButton(
+            icon: Icons.cameraswitch_rounded,
+            size: 56,
+            onTap: () async {
+              await camera.toggleCamera();
+            },
           ),
         ],
       ),
@@ -457,36 +520,195 @@ class _AgeGenderEthnicityCard extends StatelessWidget {
   }
 }
 
-/// Individual info item with icon and text
-class _InfoItem extends StatelessWidget {
-  const _InfoItem({
+/// Circular icon button with dark background.
+class _CircleIconButton extends StatelessWidget {
+  const _CircleIconButton({
     required this.icon,
-    required this.text,
-    required this.iconColor,
+    required this.onTap,
+    this.size = 48,
+    this.isActive = false,
   });
 
   final IconData icon;
-  final String text;
-  final Color iconColor;
+  final VoidCallback? onTap;
+  final double size;
+  final bool isActive;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isActive
+              ? AppColors.primary.withValues(alpha: 0.3)
+              : AppColors.surface.withValues(alpha: 0.8),
+          border: Border.all(
+            color: isActive ? AppColors.primary : AppColors.cardBorder,
+            width: 1,
+          ),
+        ),
+        child: Icon(
+          icon,
+          color: isActive ? AppColors.primary : AppColors.textPrimary,
+          size: size * 0.45,
+        ),
+      ),
+    );
+  }
+}
+
+/// Privacy toggle pill widget.
+class _PrivacyPill extends StatelessWidget {
+  const _PrivacyPill({required this.isOn, required this.onToggle});
+
+  final bool isOn;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onToggle,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          color: AppColors.surface.withValues(alpha: 0.9),
+          border: Border.all(color: AppColors.cardBorder, width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.lock_rounded,
+              size: 16,
+              color: isOn ? AppColors.primary : AppColors.textTertiary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'PRIVACY',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(width: 10),
+            _MiniToggle(isOn: isOn),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Mini toggle widget inside privacy pill.
+class _MiniToggle extends StatelessWidget {
+  const _MiniToggle({required this.isOn});
+
+  final bool isOn;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: 40,
+      height: 22,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: isOn ? AppColors.primary : AppColors.surfaceLight,
+      ),
+      child: AnimatedAlign(
+        duration: const Duration(milliseconds: 200),
+        alignment: isOn ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          width: 18,
+          height: 18,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Stats panel showing FPS, latency, and model info.
+class _StatsPanel extends StatelessWidget {
+  const _StatsPanel({required this.fps, required this.latency});
+
+  final double fps;
+  final double latency;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.overlay,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.cardBorder, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _StatRow(
+              label: 'FPS',
+              value: fps.toStringAsFixed(1),
+              color: AppColors.accentGold),
+          const SizedBox(height: 2),
+          _StatRow(
+              label: 'LATENCY',
+              value: '${latency.toInt()}ms',
+              color: AppColors.accent),
+          const SizedBox(height: 2),
+          _StatRow(
+              label: 'MODEL', value: 'FACE_V4.2', color: AppColors.textPrimary),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatRow extends StatelessWidget {
+  const _StatRow(
+      {required this.label, required this.value, required this.color});
+
+  final String label;
+  final String value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          icon,
-          size: 16,
-          color: iconColor,
+        SizedBox(
+          width: 58,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 10,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
-        const SizedBox(width: 5),
         Text(
-          text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.3,
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 10,
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.bold,
           ),
         ),
       ],
@@ -494,8 +716,153 @@ class _InfoItem extends StatelessWidget {
   }
 }
 
-class _FaceBoxesOverlay extends StatelessWidget {
-  const _FaceBoxesOverlay({required this.provider});
+/// Vertical emotion confidence bars on the right edge.
+class _EmotionBars extends StatelessWidget {
+  const _EmotionBars({required this.face});
+
+  final FaceAttributes face;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = [AppColors.accent, AppColors.surprised, Color(0xFF00BCD4)];
+    final values = [
+      face.confidence,
+      (face.rawSmileProb ?? 0.5),
+      ((face.leftEyeOpenProb ?? 0.5) + (face.rightEyeOpenProb ?? 0.5)) / 2,
+    ];
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(3, (i) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Container(
+            width: 6,
+            height: 60,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(3),
+              color: colors[i].withValues(alpha: 0.2),
+            ),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: 6,
+                height: 60 * values[i].clamp(0.0, 1.0),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(3),
+                  color: colors[i],
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+/// Floating labels over each detected face showing emoji + info.
+class _FaceLabelsOverlay extends StatelessWidget {
+  const _FaceLabelsOverlay({required this.faces});
+  final List<FaceAttributes> faces;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final h = constraints.maxHeight;
+        return Stack(
+          children: faces.asMap().entries.map((entry) {
+            final i = entry.key;
+            final face = entry.value;
+            final faceRect = Rect.fromLTWH(
+              face.rect.left * w,
+              face.rect.top * h,
+              face.rect.width * w,
+              face.rect.height * h,
+            );
+
+            // Label positioned below the face box
+            final labelTop = (faceRect.bottom + 4).clamp(0.0, h - 60);
+            final labelLeft = faceRect.left.clamp(0.0, w - 120);
+
+            return Positioned(
+              left: labelLeft,
+              top: labelTop,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.overlay,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.3),
+                      width: 0.5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      face.emotion.emoji,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(width: 4),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${face.emotion.label} · ${face.gender}',
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          '${face.ageRange}${face.headEulerAngleY != null ? " · Y${face.headEulerAngleY!.toStringAsFixed(0)}°" : ""}',
+                          style: TextStyle(
+                            color: AppColors.textTertiary,
+                            fontSize: 8,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (faces.length > 1) ...[
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(4),
+                          color: AppColors.primary.withValues(alpha: 0.3),
+                        ),
+                        child: Text(
+                          '#${i + 1}',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+}
+
+/// Blue corner-bracket face overlay (matching screenshot design).
+class _FaceCornerBracketOverlay extends StatelessWidget {
+  const _FaceCornerBracketOverlay({required this.provider});
   final FaceAttributesProvider provider;
 
   @override
@@ -504,74 +871,118 @@ class _FaceBoxesOverlay extends StatelessWidget {
       animation: provider,
       builder: (context, _) {
         return CustomPaint(
-          painter: _BoxesPainter(provider.faces),
+          painter: _CornerBracketPainter(provider.faces),
         );
       },
     );
   }
 }
 
-class _BoxesPainter extends CustomPainter {
-  _BoxesPainter(this.faces);
+class _CornerBracketPainter extends CustomPainter {
+  _CornerBracketPainter(this.faces);
   final List<FaceAttributes> faces;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..color = Colors.greenAccent;
     for (final f in faces) {
-      // Face rect is already normalized (0-1), just scale to canvas size
-      // The normalization in face_attributes_provider.dart already handles rotation
       final rect = Rect.fromLTWH(
         f.rect.left * size.width,
         f.rect.top * size.height,
         f.rect.width * size.width,
         f.rect.height * size.height,
       );
-      canvas.drawRect(rect, paint);
 
-      // Emoji rendering handled by top-center card; avoid drawing emoji here to prevent duplication.
+      // Draw blue corner brackets
+      final paint = Paint()
+        ..color = AppColors.primary
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round;
 
-      // Info: age • gender • ethnicity (or Unknown)
-      final info = "${f.ageRange} • ${f.gender} • ${f.ethnicity ?? 'Unknown'}";
-      final infoPainter = TextPainter(
-        text: TextSpan(
-          text: info,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            shadows: [Shadow(color: Colors.black, blurRadius: 3)],
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-        maxLines: 1,
-        ellipsis: '…',
-      )..layout(maxWidth: size.width);
-      final infoOffset = Offset(rect.left, rect.bottom + 4);
-      infoPainter.paint(canvas, infoOffset);
+      final cornerLen = (rect.width * 0.15).clamp(12.0, 30.0);
+
+      // Top-left
+      canvas.drawLine(
+        Offset(rect.left, rect.top + cornerLen),
+        Offset(rect.left, rect.top),
+        paint,
+      );
+      canvas.drawLine(
+        Offset(rect.left, rect.top),
+        Offset(rect.left + cornerLen, rect.top),
+        paint,
+      );
+
+      // Top-right
+      canvas.drawLine(
+        Offset(rect.right - cornerLen, rect.top),
+        Offset(rect.right, rect.top),
+        paint,
+      );
+      canvas.drawLine(
+        Offset(rect.right, rect.top),
+        Offset(rect.right, rect.top + cornerLen),
+        paint,
+      );
+
+      // Bottom-left
+      canvas.drawLine(
+        Offset(rect.left, rect.bottom - cornerLen),
+        Offset(rect.left, rect.bottom),
+        paint,
+      );
+      canvas.drawLine(
+        Offset(rect.left, rect.bottom),
+        Offset(rect.left + cornerLen, rect.bottom),
+        paint,
+      );
+
+      // Bottom-right
+      canvas.drawLine(
+        Offset(rect.right - cornerLen, rect.bottom),
+        Offset(rect.right, rect.bottom),
+        paint,
+      );
+      canvas.drawLine(
+        Offset(rect.right, rect.bottom),
+        Offset(rect.right, rect.bottom - cornerLen),
+        paint,
+      );
+
+      // Thin crosshair lines through center
+      final cx = rect.center.dx;
+      final cy = rect.center.dy;
+      final crossPaint = Paint()
+        ..color = AppColors.textSecondary.withValues(alpha: 0.25)
+        ..strokeWidth = 0.5;
+
+      canvas.drawLine(
+        Offset(rect.left + cornerLen, cy),
+        Offset(rect.right - cornerLen, cy),
+        crossPaint,
+      );
+      canvas.drawLine(
+        Offset(cx, rect.top + cornerLen),
+        Offset(cx, rect.bottom - cornerLen),
+        crossPaint,
+      );
+
+      // Center dot
+      canvas.drawCircle(
+        Offset(cx, cy),
+        3,
+        Paint()..color = AppColors.primary.withValues(alpha: 0.6),
+      );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _BoxesPainter oldDelegate) =>
-      _didFacesChange(oldDelegate.faces, faces);
-}
-
-// Old discrete emoji helper removed; replaced by morphing crossfade rendering above.
-
-bool _didFacesChange(List<FaceAttributes> a, List<FaceAttributes> b) {
-  if (identical(a, b)) return false;
-  if (a.length != b.length) return true;
-  for (var i = 0; i < a.length; i++) {
-    final fa = a[i];
-    final fb = b[i];
-    if (fa.rect != fb.rect ||
-        fa.emotion != fb.emotion ||
-        fa.confidence != fb.confidence) {
-      return true;
+  bool shouldRepaint(covariant _CornerBracketPainter oldDelegate) {
+    if (identical(oldDelegate.faces, faces)) return false;
+    if (oldDelegate.faces.length != faces.length) return true;
+    for (var i = 0; i < faces.length; i++) {
+      if (oldDelegate.faces[i].rect != faces[i].rect) return true;
     }
+    return false;
   }
-  return false;
 }

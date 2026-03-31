@@ -22,6 +22,10 @@ class FaceAttributes {
     this.rawSmileProb,
     this.leftEyeOpenProb,
     this.rightEyeOpenProb,
+    this.headEulerAngleX,
+    this.headEulerAngleY,
+    this.headEulerAngleZ,
+    this.trackingId,
   });
   final Rect rect;
   final Emotion emotion;
@@ -32,6 +36,10 @@ class FaceAttributes {
   final double? rawSmileProb;
   final double? leftEyeOpenProb;
   final double? rightEyeOpenProb;
+  final double? headEulerAngleX;
+  final double? headEulerAngleY;
+  final double? headEulerAngleZ;
+  final int? trackingId;
 }
 
 class FaceAttributesProvider extends ChangeNotifier {
@@ -52,42 +60,50 @@ class FaceAttributesProvider extends ChangeNotifier {
   bool _running = false;
   bool _busy = false;
   int _skip = 0;
-  int targetFps = 5;
+  int targetFps = 8;
   int _notifyThrottle = 0;
   int _lastFaceCount = 0;
   final Map<int, double> _emaConfidence = {};
   final double _emaAlpha = 0.4;
   StreamSubscription<CameraImage>? _imageStreamSubscription;
 
-  // Emotion smoothing with history (from face_detection-main)
-  final List<Emotion> _expressionHistory = [];
-  static const int historyLength = 5;
+  // Performance tracking
+  final Stopwatch _frameStopwatch = Stopwatch();
+  double _lastLatencyMs = 0;
+  double _currentFps = 0;
+  int _fpsFrameCount = 0;
+  DateTime _fpsLastTime = DateTime.now();
+  double get lastLatencyMs => _lastLatencyMs;
+  double get currentFps => _currentFps;
 
-  // Age/Gender smoothing history (reduce flickering)
-  final List<int> _ageHistory = [];
-  final List<String> _genderHistory = [];
+  // Emotion smoothing — per-face by trackingId
+  final Map<int, List<Emotion>> _expressionHistoryMap = {};
+  final Map<int, List<int>> _ageHistoryMap = {};
+  final Map<int, List<String>> _genderHistoryMap = {};
+  final Map<int, List<String>> _ethnicityHistoryMap = {};
+  static const int historyLength = 5;
   static const int attributeHistoryLength = 8;
+
+  // Emotion alert callback
+  void Function(Emotion emotion, double confidence, int faceIndex)?
+      onEmotionAlert;
+  Emotion? _alertEmotion;
+  double _alertThreshold = 0.7;
+
+  void setEmotionAlert(Emotion? emotion, double threshold) {
+    _alertEmotion = emotion;
+    _alertThreshold = threshold;
+  }
 
   Future<void> start() async {
     if (_running) return;
 
-    debugPrint('[FaceProvider] 🚀 Starting face detection...');
-
-    // Initialize ML Kit for face detection
     if (!kIsWeb) {
-      debugPrint('[FaceProvider] Initializing ML Kit...');
       await _mlkitService.initialize();
-      debugPrint('[FaceProvider] Initializing TFLite...');
-      // Initialize TFLite only for age/gender/ethnicity prediction (non-blocking fallback)
       try {
         await _tfliteService.initialize();
-        debugPrint('[FaceProvider] ✅ All services initialized');
-      } catch (e, stackTrace) {
-        debugPrint(
-            '[FaceProvider] ⚠️ TFLite initialization failed - will use ML Kit only: $e');
-        debugPrint('[FaceProvider] Stack trace: $stackTrace');
-        debugPrint(
-            '[FaceProvider] ✅ Continuing with ML Kit for face/emotion detection');
+      } catch (e) {
+        debugPrint('[FaceProvider] TFLite init failed, ML Kit only: $e');
       }
     }
 
@@ -95,11 +111,9 @@ class FaceAttributesProvider extends ChangeNotifier {
     _running = true;
     await _imageStreamSubscription?.cancel();
     _imageStreamSubscription = _camera.imageStream.listen(_onFrame);
-    debugPrint('[FaceProvider] ✅ Image stream started');
   }
 
   Future<void> stop() async {
-    debugPrint('[FaceProvider] Stopping face detection...');
     _running = false;
     await _imageStreamSubscription?.cancel();
     _imageStreamSubscription = null;
@@ -116,108 +130,114 @@ class FaceAttributesProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  Future<void> _onFrame(CameraImage image) async {
-    if (!_running) {
-      debugPrint('[FaceProvider] ⚠️ _onFrame called but not running');
-      return;
-    }
+  /// Transform ML Kit bounding box from rotated image space to raw camera frame space.
+  /// ML Kit processes an NV21 image with specified rotation, so its bounding box
+  /// is in the rotated coordinate system. We need to map it back to the original
+  /// raw frame coordinates for cropping.
+  Rect _transformBboxToRawFrame(
+    Rect mlKitBox,
+    int imageWidth,
+    int imageHeight,
+    int sensorOrientation,
+    bool isFrontCamera,
+  ) {
+    double left = mlKitBox.left;
+    double top = mlKitBox.top;
+    double width = mlKitBox.width;
+    double height = mlKitBox.height;
 
-    if (_busy) {
-      // Don't spam logs for busy frames
-      return;
-    }
+    // The ML Kit bounding box is already in the raw frame coordinate space
+    // because we pass the rotation in metadata. ML Kit accounts for it internally.
+    // However, on some Android devices the coordinates may need clamping.
+
+    // Clamp to valid frame dimensions
+    left = left.clamp(0.0, imageWidth.toDouble());
+    top = top.clamp(0.0, imageHeight.toDouble());
+    width = width.clamp(1.0, imageWidth.toDouble() - left);
+    height = height.clamp(1.0, imageHeight.toDouble() - top);
+
+    // Expand bounding box by 15% for better face capture
+    final expandX = width * 0.15;
+    final expandY = height * 0.20;
+
+    left = (left - expandX).clamp(0.0, imageWidth.toDouble());
+    top = (top - expandY).clamp(0.0, imageHeight.toDouble());
+    width = (width + 2 * expandX).clamp(1.0, imageWidth.toDouble() - left);
+    height = (height + 2 * expandY).clamp(1.0, imageHeight.toDouble() - top);
+
+    return Rect.fromLTWH(left, top, width, height);
+  }
+
+  Future<void> _onFrame(CameraImage image) async {
+    if (!_running || _busy) return;
 
     final baseSkip = (30 / targetFps).round().clamp(1, 30);
     _skip = (_skip + 1) % baseSkip;
     if (_skip != 0) return;
 
-    debugPrint(
-        '[FaceProvider] 📸 Processing frame ${image.width}x${image.height}');
-
     _busy = true;
+    _frameStopwatch.reset();
+    _frameStopwatch.start();
+
     try {
-      // Check if ML Kit is initialized
-      if (!_mlkitService.isInitialized) {
-        debugPrint('[FaceProvider] ❌ ML Kit not initialized!');
-        return;
-      }
+      if (!_mlkitService.isInitialized) return;
 
-      // Use ML Kit for face detection (more reliable)
       final cameraDescription = _camera.description;
-      if (cameraDescription == null) {
-        debugPrint('[FaceProvider] ❌ No camera description available');
-        return;
-      }
+      if (cameraDescription == null) return;
 
-      // Use ImageConverter for proper YUV420 to NV21 conversion
       final inputImage = ImageConverter.convertCameraImage(
         image,
         cameraDescription.sensorOrientation,
       );
+      if (inputImage == null) return;
 
-      if (inputImage == null) {
-        debugPrint('[FaceProvider] ❌ Failed to convert image');
-        return;
-      }
-
-      // Get actual Face objects for frown detection
       final faceDetector = _mlkitService.faceDetector;
-      if (faceDetector == null) {
-        debugPrint('[FaceProvider] ❌ Face detector is null');
-        return;
-      }
+      if (faceDetector == null) return;
 
       final faces = await faceDetector.processImage(inputImage);
-      debugPrint('[FaceProvider] ML Kit returned ${faces.length} face(s)');
-
       _faces.clear();
 
-      if (faces.isNotEmpty) {
-        // Process only the largest face
-        final largest = faces.reduce((a, b) =>
-            (a.boundingBox.width * a.boundingBox.height) >
-                    (b.boundingBox.width * b.boundingBox.height)
-                ? a
-                : b);
+      // Sort faces by area (largest first) and process up to 5
+      final sortedFaces = List.of(faces);
+      sortedFaces.sort((a, b) {
+        final areaA = a.boundingBox.width * a.boundingBox.height;
+        final areaB = b.boundingBox.width * b.boundingBox.height;
+        return areaB.compareTo(areaA);
+      });
+      final facesToProcess = sortedFaces.take(5).toList();
 
-        // Normalize coordinates and handle front camera mirroring
-        // For front camera, ML Kit coordinates need to be mirrored horizontally
+      final activeTrackingIds = <int>{};
+
+      for (int fi = 0; fi < facesToProcess.length; fi++) {
+        final face = facesToProcess[fi];
+        final trackingId = face.trackingId ?? fi;
+        activeTrackingIds.add(trackingId);
+
         final isFrontCamera =
             cameraDescription.lensDirection == CameraLensDirection.front;
 
-        // Get raw bounding box
-        final rawBox = largest.boundingBox;
-
-        // Expand bounding box to better center face (30-35% padding each direction)
-        // This ensures full face capture and proper centering
-        const expandFactorX = 0.30; // 30% horizontal expansion
-        const expandFactorY =
-            0.35; // 35% vertical expansion (more for forehead/chin)
-
+        // Normalized bounding box for UI overlay
+        final rawBox = face.boundingBox;
+        const expandFactorX = 0.30;
+        const expandFactorY = 0.35;
         final expandX = rawBox.width * expandFactorX;
         final expandY = rawBox.height * expandFactorY;
 
-        // Calculate expanded box with bounds checking
         final expandedLeft =
             (rawBox.left - expandX).clamp(0.0, image.width.toDouble());
         final expandedTop =
             (rawBox.top - expandY).clamp(0.0, image.height.toDouble());
-
-        // Calculate max possible dimensions
         final maxWidth = image.width.toDouble() - expandedLeft;
         final maxHeight = image.height.toDouble() - expandedTop;
-
         final expandedWidth = (rawBox.width + 2 * expandX).clamp(1.0, maxWidth);
         final expandedHeight =
             (rawBox.height + 2 * expandY).clamp(1.0, maxHeight);
 
-        // Normalize to 0-1 range
         var left = expandedLeft / image.width;
         final top = expandedTop / image.height;
         final width = expandedWidth / image.width;
         final height = expandedHeight / image.height;
 
-        // Mirror horizontally for front camera
         if (isFrontCamera) {
           left = 1.0 - left - width;
         }
@@ -229,19 +249,13 @@ class FaceAttributesProvider extends ChangeNotifier {
           height.clamp(0.0, 1.0),
         );
 
-        debugPrint(
-            '[FaceProvider] 📐 Raw: ${largest.boundingBox} -> Norm: $rect');
-
-        // Use enhanced emotion detection with frown detection (pass Face object)
+        // Emotion from ML Kit heuristics
         final emotionStr = _mlkitService.inferEmotion(
-          largest.smilingProbability,
-          largest.leftEyeOpenProbability,
-          largest.rightEyeOpenProbability,
-          largest, // Pass Face object for frown detection
+          face.smilingProbability,
+          face.leftEyeOpenProbability,
+          face.rightEyeOpenProbability,
+          face,
         );
-
-        debugPrint(
-            '[FaceProvider] 🎭 Raw emotion: $emotionStr | Smile: ${largest.smilingProbability?.toStringAsFixed(3)} | LeftEye: ${largest.leftEyeOpenProbability?.toStringAsFixed(2)} | RightEye: ${largest.rightEyeOpenProbability?.toStringAsFixed(2)}');
 
         final emotionMap = {
           'Happy': Emotion.happy,
@@ -252,102 +266,121 @@ class FaceAttributesProvider extends ChangeNotifier {
         };
         final rawEmotion = emotionMap[emotionStr] ?? Emotion.neutral;
 
-        // Add to emotion history for smoothing (from face_detection-main)
-        _expressionHistory.add(rawEmotion);
-        if (_expressionHistory.length > historyLength) {
-          _expressionHistory.removeAt(0);
+        // Per-face emotion smoothing
+        _expressionHistoryMap.putIfAbsent(trackingId, () => []);
+        _expressionHistoryMap[trackingId]!.add(rawEmotion);
+        if (_expressionHistoryMap[trackingId]!.length > historyLength) {
+          _expressionHistoryMap[trackingId]!.removeAt(0);
         }
-
-        // Get smoothed emotion (most common in history)
-        final smoothedEmotion = _getSmoothedEmotion();
-
-        debugPrint(
-            '[FaceProvider] ✅ Smoothed emotion: $smoothedEmotion (history: $_expressionHistory)');
+        final smoothedEmotion = _getSmoothedEmotionFor(trackingId);
 
         final inferredConfidence = MLKitFaceService.getEmotionConfidence(
-          largest.smilingProbability,
+          face.smilingProbability,
         );
 
-        // Try to get age/gender/ethnicity from TFLite
         String gender = 'Unknown';
-        String ageRange = 'Unknown';
+        String ageRange = '~';
         String? ethnicity = 'Unknown';
 
-        // Only try TFLite if attributes model is available
         if (_tfliteService.hasAttributes) {
           try {
-            debugPrint('[FaceProvider] Running TFLite for age/gender...');
-
-            final bb = Rect.fromLTWH(
-              largest.boundingBox.left.clamp(0, image.width.toDouble()),
-              largest.boundingBox.top.clamp(0, image.height.toDouble()),
-              largest.boundingBox.width.clamp(1, image.width.toDouble()),
-              largest.boundingBox.height.clamp(1, image.height.toDouble()),
+            final cropBb = _transformBboxToRawFrame(
+              face.boundingBox,
+              image.width,
+              image.height,
+              cameraDescription.sensorOrientation,
+              isFrontCamera,
             );
 
-            // Prepare input for age model (200x200)
-            final ageBuffer = Float32List(200 * 200 * 3);
+            final hasUV = image.planes.length > 2;
+            final uBytes = hasUV ? image.planes[1].bytes : null;
+            final vBytes = hasUV ? image.planes[2].bytes : null;
+            final uvRowStride = hasUV ? image.planes[1].bytesPerRow : 0;
+            final uvPixelStride =
+                hasUV ? (image.planes[1].bytesPerPixel ?? 1) : 1;
+
+            final ageSz = _tfliteService.ageInputSize;
             final ageInput = yuvToRgbInput(
               image.planes[0].bytes,
-              image.planes.length > 1 ? image.planes[1].bytes : null,
-              image.planes.length > 2 ? image.planes[2].bytes : null,
+              uBytes,
+              vBytes,
               image.width,
               image.height,
-              image.planes.length > 1 ? image.planes[1].bytesPerRow : 0,
-              image.planes.length > 1 ? image.planes[1].bytesPerPixel ?? 1 : 1,
-              bb,
-              200,
-              200,
-              ageBuffer,
+              uvRowStride,
+              uvPixelStride,
+              cropBb,
+              ageSz,
+              ageSz,
+              mode: NormalizationMode.standard,
             );
 
-            // Prepare input for gender model (128x128)
-            final genderBuffer = Float32List(128 * 128 * 3);
+            final genSz = _tfliteService.genderInputSize;
             final genderInput = yuvToRgbInput(
               image.planes[0].bytes,
-              image.planes.length > 1 ? image.planes[1].bytes : null,
-              image.planes.length > 2 ? image.planes[2].bytes : null,
+              uBytes,
+              vBytes,
               image.width,
               image.height,
-              image.planes.length > 1 ? image.planes[1].bytesPerRow : 0,
-              image.planes.length > 1 ? image.planes[1].bytesPerPixel ?? 1 : 1,
-              bb,
-              128,
-              128,
-              genderBuffer,
+              uvRowStride,
+              uvPixelStride,
+              cropBb,
+              genSz,
+              genSz,
+              mode: NormalizationMode.standard,
             );
 
-            final attrs =
-                await _tfliteService.predictAttributes(ageInput, genderInput);
-
-            // Add to history for smoothing
-            _ageHistory.add(attrs.age);
-            _genderHistory.add(attrs.gender);
-            if (_ageHistory.length > attributeHistoryLength) {
-              _ageHistory.removeAt(0);
-              _genderHistory.removeAt(0);
+            Float32List? ethInput;
+            if (_tfliteService.hasEthnicity) {
+              final ethSz = _tfliteService.ethnicityInputSize;
+              ethInput = yuvToRgbInput(
+                image.planes[0].bytes,
+                uBytes,
+                vBytes,
+                image.width,
+                image.height,
+                uvRowStride,
+                uvPixelStride,
+                cropBb,
+                ethSz,
+                ethSz,
+                mode: NormalizationMode.standard,
+              );
             }
 
-            // Use smoothed values
-            final smoothedAge = _getSmoothedAge();
-            final smoothedGender = _getSmoothedGender();
+            final attrs = await _tfliteService.predictAttributes(
+              ageInput,
+              genderInput,
+              faceRgbEthnicity: ethInput,
+            );
 
-            gender = smoothedGender;
-            ageRange = '$smoothedAge';
-            ethnicity = 'Unknown'; // No ethnicity model
+            // Per-face attribute smoothing
+            _ageHistoryMap.putIfAbsent(trackingId, () => []);
+            _genderHistoryMap.putIfAbsent(trackingId, () => []);
+            _ethnicityHistoryMap.putIfAbsent(trackingId, () => []);
 
-            debugPrint(
-                '[FaceProvider] ✅ TFLite results: Raw Age=${attrs.age}, Smoothed Age=$smoothedAge | Raw Gender=${attrs.gender}, Smoothed Gender=$smoothedGender');
-          } catch (e, stackTrace) {
-            debugPrint('[FaceProvider] ⚠️ Attribute prediction error: $e');
-            debugPrint('[FaceProvider] Stack trace: $stackTrace');
-            // Fall back to unknown values - at least face detection and emotion work
+            _ageHistoryMap[trackingId]!.add(attrs.age);
+            _genderHistoryMap[trackingId]!.add(attrs.gender);
+            if (attrs.ethnicity != 'Unknown') {
+              _ethnicityHistoryMap[trackingId]!.add(attrs.ethnicity);
+            }
+            if (_ageHistoryMap[trackingId]!.length > attributeHistoryLength) {
+              _ageHistoryMap[trackingId]!.removeAt(0);
+            }
+            if (_genderHistoryMap[trackingId]!.length >
+                attributeHistoryLength) {
+              _genderHistoryMap[trackingId]!.removeAt(0);
+            }
+            if (_ethnicityHistoryMap[trackingId]!.length >
+                attributeHistoryLength) {
+              _ethnicityHistoryMap[trackingId]!.removeAt(0);
+            }
+
+            gender = _getSmoothedGenderFor(trackingId);
+            ageRange = '~${_getSmoothedAgeFor(trackingId)}';
+            ethnicity = _getSmoothedEthnicityFor(trackingId);
+          } catch (e) {
+            debugPrint('[FaceProvider] Attribute prediction error: $e');
           }
-        } else {
-          debugPrint(
-              '[FaceProvider] ⚠️ TFLite attributes model not available - Age/Gender/Ethnicity will show as "Unknown"');
-          debugPrint(
-              '[FaceProvider] ℹ️ Check console logs for TFLite model loading errors');
         }
 
         final key = _rectKey(rect);
@@ -364,19 +397,46 @@ class FaceAttributesProvider extends ChangeNotifier {
           ageRange: ageRange,
           gender: gender,
           ethnicity: ethnicity,
-          rawSmileProb: largest.smilingProbability,
-          leftEyeOpenProb: largest.leftEyeOpenProbability,
-          rightEyeOpenProb: largest.rightEyeOpenProbability,
+          rawSmileProb: face.smilingProbability,
+          leftEyeOpenProb: face.leftEyeOpenProbability,
+          rightEyeOpenProb: face.rightEyeOpenProbability,
+          headEulerAngleX: face.headEulerAngleX,
+          headEulerAngleY: face.headEulerAngleY,
+          headEulerAngleZ: face.headEulerAngleZ,
+          trackingId: trackingId,
         ));
 
-        debugPrint(
-            '[FaceProvider] ✅ Face added: ${smoothedEmotion.label} (confidence: ${smoothed.toStringAsFixed(2)})');
+        // Emotion alert check
+        if (_alertEmotion != null &&
+            smoothedEmotion == _alertEmotion &&
+            smoothed >= _alertThreshold) {
+          onEmotionAlert?.call(smoothedEmotion, smoothed, fi);
+        }
+      }
+
+      // Cleanup stale tracking data
+      if (facesToProcess.isEmpty) {
+        _expressionHistoryMap.clear();
+        _ageHistoryMap.clear();
+        _genderHistoryMap.clear();
+        _ethnicityHistoryMap.clear();
       } else {
-        // Clear history when no face detected
-        _expressionHistory.clear();
-        _ageHistory.clear();
-        _genderHistory.clear();
-        debugPrint('[FaceProvider] 👤 No faces detected in this frame');
+        _expressionHistoryMap
+            .removeWhere((k, _) => !activeTrackingIds.contains(k));
+        _ageHistoryMap.removeWhere((k, _) => !activeTrackingIds.contains(k));
+        _genderHistoryMap.removeWhere((k, _) => !activeTrackingIds.contains(k));
+        _ethnicityHistoryMap
+            .removeWhere((k, _) => !activeTrackingIds.contains(k));
+      }
+
+      // Update FPS tracking
+      _fpsFrameCount++;
+      final now = DateTime.now();
+      final elapsed = now.difference(_fpsLastTime).inMilliseconds;
+      if (elapsed > 1000) {
+        _currentFps = _fpsFrameCount * 1000.0 / elapsed;
+        _fpsFrameCount = 0;
+        _fpsLastTime = now;
       }
 
       final changedCount = _faces.length != _lastFaceCount;
@@ -387,44 +447,49 @@ class FaceAttributesProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e, stackTrace) {
-      debugPrint('[FaceProvider] ❌ Frame error: $e');
+      debugPrint('[FaceProvider] Frame error: $e');
       debugPrint('[FaceProvider] Stack trace: $stackTrace');
     } finally {
+      _frameStopwatch.stop();
+      _lastLatencyMs = _frameStopwatch.elapsedMilliseconds.toDouble();
       _busy = false;
     }
   }
 
-  // Get most common emotion from history (from face_detection-main)
-  Emotion _getSmoothedEmotion() {
-    if (_expressionHistory.isEmpty) return Emotion.neutral;
-
-    // Count occurrences
+  Emotion _getSmoothedEmotionFor(int trackingId) {
+    final history = _expressionHistoryMap[trackingId];
+    if (history == null || history.isEmpty) return Emotion.neutral;
     final counts = <Emotion, int>{};
-    for (var emotion in _expressionHistory) {
+    for (var emotion in history) {
       counts[emotion] = (counts[emotion] ?? 0) + 1;
     }
-
-    // Return most common
     return counts.entries.reduce((a, b) => a.value > b.value ? a : b).key;
   }
 
-  // Get smoothed age using median (more robust than average)
-  int _getSmoothedAge() {
-    if (_ageHistory.isEmpty) return 0;
-
-    final sorted = List<int>.from(_ageHistory)..sort();
-    return sorted[sorted.length ~/ 2]; // Median value
+  int _getSmoothedAgeFor(int trackingId) {
+    final history = _ageHistoryMap[trackingId];
+    if (history == null || history.isEmpty) return 0;
+    final sorted = List<int>.from(history)..sort();
+    return sorted[sorted.length ~/ 2];
   }
 
-  // Get most common gender from history
-  String _getSmoothedGender() {
-    if (_genderHistory.isEmpty) return 'Unknown';
-
+  String _getSmoothedGenderFor(int trackingId) {
+    final history = _genderHistoryMap[trackingId];
+    if (history == null || history.isEmpty) return 'Unknown';
     final counts = <String, int>{};
-    for (var gender in _genderHistory) {
+    for (var gender in history) {
       counts[gender] = (counts[gender] ?? 0) + 1;
     }
+    return counts.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+  }
 
+  String _getSmoothedEthnicityFor(int trackingId) {
+    final history = _ethnicityHistoryMap[trackingId];
+    if (history == null || history.isEmpty) return 'Unknown';
+    final counts = <String, int>{};
+    for (var eth in history) {
+      counts[eth] = (counts[eth] ?? 0) + 1;
+    }
     return counts.entries.reduce((a, b) => a.value > b.value ? a : b).key;
   }
 }

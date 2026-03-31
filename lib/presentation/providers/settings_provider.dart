@@ -18,6 +18,10 @@ class SettingsProvider extends ChangeNotifier {
   double _autoCaptureConfidence = 0.75; // threshold for auto capture trigger
   int _autoCaptureCooldownSec = 8; // cooldown before next auto capture
   bool _ethnicityEnabled = true; // enabled by default
+  bool _hasSeenOnboarding = false;
+  String _modelMode = 'accuracy'; // 'accuracy' or 'speed'
+  String _alertEmotion = ''; // empty = disabled
+  double _alertThreshold = 0.7;
 
   bool get showAgeGender => _showAgeGender;
   bool get soundOn => _soundOn;
@@ -33,6 +37,10 @@ class SettingsProvider extends ChangeNotifier {
   double get autoCaptureConfidence => _autoCaptureConfidence;
   int get autoCaptureCooldownSec => _autoCaptureCooldownSec;
   bool get ethnicityEnabled => _ethnicityEnabled;
+  bool get hasSeenOnboarding => _hasSeenOnboarding;
+  String get modelMode => _modelMode;
+  String get alertEmotion => _alertEmotion;
+  double get alertThreshold => _alertThreshold;
 
   SettingsProvider() {
     _init();
@@ -84,6 +92,10 @@ class SettingsProvider extends ChangeNotifier {
     _autoCaptureConfidence = await _repo.getAutoCaptureConfidence();
     _autoCaptureCooldownSec = await _repo.getAutoCaptureCooldownSec();
     _ethnicityEnabled = await _repo.getEthnicityEnabled();
+    _hasSeenOnboarding = await _repo.getHasSeenOnboarding();
+    _modelMode = await _repo.getModelMode();
+    _alertEmotion = await _repo.getAlertEmotion();
+    _alertThreshold = await _repo.getAlertThreshold();
     notifyListeners();
   }
 
@@ -168,6 +180,30 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setEthnicityEnabled(bool v) async {
     _ethnicityEnabled = v;
     await _repo.setEthnicityEnabled(v);
+    notifyListeners();
+  }
+
+  Future<void> setHasSeenOnboarding(bool v) async {
+    _hasSeenOnboarding = v;
+    await _repo.setHasSeenOnboarding(v);
+    notifyListeners();
+  }
+
+  Future<void> setModelMode(String v) async {
+    _modelMode = v;
+    await _repo.setModelMode(v);
+    notifyListeners();
+  }
+
+  Future<void> setAlertEmotion(String v) async {
+    _alertEmotion = v;
+    await _repo.setAlertEmotion(v);
+    notifyListeners();
+  }
+
+  Future<void> setAlertThreshold(double v) async {
+    _alertThreshold = v;
+    await _repo.setAlertThreshold(v);
     notifyListeners();
   }
 

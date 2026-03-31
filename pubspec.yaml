@@ -42,4 +42,5 @@ flutter:
     - assets/models/face_detection_short_range.tflite
     - assets/models/model_lite_age_q.tflite
     - assets/models/model_lite_gender_q.tflite
+    - assets/models/age_gender_ethnicity_new.tflite
     - assets/sounds/

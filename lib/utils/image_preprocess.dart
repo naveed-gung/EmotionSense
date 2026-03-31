@@ -3,6 +3,18 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+/// Normalization modes for model input preprocessing.
+enum NormalizationMode {
+  /// (x - 127.5) / 128.0 → range [-1, 1] (MobileNet-style)
+  mobilenet,
+
+  /// x / 255.0 → range [0, 1] (standard for UTKFace-derived models)
+  standard,
+
+  /// No normalization — raw [0, 255] cast to float
+  none,
+}
+
 /// Convert Y plane to grayscale Float32 input [1, H, W, 1] flattened
 /// normalized by /255 for model input. Returns a flat Float32List size H*W.
 Float32List yuvToGrayscaleInput(
@@ -25,27 +37,32 @@ Float32List yuvToGrayscaleInput(
     for (int ox = 0; ox < outW; ox++) {
       final sx = left + (ox * cropW / outW).floor();
       final yIndex = sy * width + sx;
-      final yVal = yBytes[yIndex];
-      out[oy * outW + ox] = yVal / 255.0;
+      if (yIndex < yBytes.length) {
+        final yVal = yBytes[yIndex];
+        out[oy * outW + ox] = yVal / 255.0;
+      }
     }
   }
   return out;
 }
 
-/// Convert YUV420 to RGB Float32 input [1, H, W, 3] flattened and normalized
-/// with (x-127.5)/128 per channel. Returns a flat Float32List size H*W*3.
+/// Convert YUV420 to RGB Float32 input [1, H, W, 3] flattened.
+/// Supports configurable normalization via [mode].
+/// Returns a flat Float32List size H*W*3.
 Float32List yuvToRgbInput(
-    Uint8List yBytes,
-    Uint8List? uBytes,
-    Uint8List? vBytes,
-    int width,
-    int height,
-    int uvRowStride,
-    int uvPixelStride,
-    Rect bb,
-    int outW,
-    int outH,
-    [Float32List? outBuffer]) {
+  Uint8List yBytes,
+  Uint8List? uBytes,
+  Uint8List? vBytes,
+  int width,
+  int height,
+  int uvRowStride,
+  int uvPixelStride,
+  Rect bb,
+  int outW,
+  int outH, {
+  NormalizationMode mode = NormalizationMode.standard,
+  Float32List? outBuffer,
+}) {
   final left = bb.left.clamp(0.0, width.toDouble()).toInt();
   final top = bb.top.clamp(0.0, height.toDouble()).toInt();
   final right = (bb.right.clamp(0.0, width.toDouble())).toInt();
@@ -63,26 +80,42 @@ Float32List yuvToRgbInput(
     for (int ox = 0; ox < outW; ox++) {
       final sx = left + (ox * cropW / outW).floor();
       final yIndex = sy * width + sx;
-      final y = yBytes[yIndex].toDouble();
+      final y = (yIndex < yBytes.length) ? yBytes[yIndex].toDouble() : 0.0;
       double r, g, b;
       if (uBytes != null && vBytes != null) {
         final uvX = (sx / 2).floor();
         final uvY = (sy / 2).floor();
         final uvIndex = uvY * uvRowStride + uvX * uvPixelStride;
-        final u = uBytes[uvIndex].toDouble() - 128.0;
-        final v = vBytes[uvIndex].toDouble() - 128.0;
-        r = y + 1.402 * v;
-        g = y - 0.344136 * u - 0.714136 * v;
-        b = y + 1.772 * u;
+        if (uvIndex < uBytes.length && uvIndex < vBytes.length) {
+          final u = uBytes[uvIndex].toDouble() - 128.0;
+          final v = vBytes[uvIndex].toDouble() - 128.0;
+          r = y + 1.402 * v;
+          g = y - 0.344136 * u - 0.714136 * v;
+          b = y + 1.772 * u;
+        } else {
+          r = g = b = y;
+        }
       } else {
         r = g = b = y;
       }
       r = r.clamp(0.0, 255.0);
       g = g.clamp(0.0, 255.0);
       b = b.clamp(0.0, 255.0);
-      out[outIdx++] = (r - 127.5) / 128.0;
-      out[outIdx++] = (g - 127.5) / 128.0;
-      out[outIdx++] = (b - 127.5) / 128.0;
+
+      switch (mode) {
+        case NormalizationMode.standard:
+          out[outIdx++] = r / 255.0;
+          out[outIdx++] = g / 255.0;
+          out[outIdx++] = b / 255.0;
+        case NormalizationMode.mobilenet:
+          out[outIdx++] = (r - 127.5) / 128.0;
+          out[outIdx++] = (g - 127.5) / 128.0;
+          out[outIdx++] = (b - 127.5) / 128.0;
+        case NormalizationMode.none:
+          out[outIdx++] = r;
+          out[outIdx++] = g;
+          out[outIdx++] = b;
+      }
     }
   }
   return out;
