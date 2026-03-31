@@ -85,7 +85,7 @@ class AnalysisResultScreen extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  const SizedBox(width: 44), // Balance the back button
+                  const SizedBox(width: 44), 
                 ],
               ),
             ),
