@@ -25,6 +25,8 @@ class SettingsRepository {
   static const _kModelMode = 'model_mode'; // 'accuracy' or 'speed'
   static const _kAlertEmotion = 'alert_emotion'; // emotion name or empty
   static const _kAlertThreshold = 'alert_threshold'; // 0.0..1.0
+    static const _kEmojiRainEnabled = 'emoji_rain_enabled';
+    static const _kFastEmotionResponse = 'fast_emotion_response';
 
   Future<bool> getShowAgeGender() async =>
       (await SharedPreferences.getInstance()).getBool(_kShowAgeGender) ?? true;
@@ -163,4 +165,16 @@ class SettingsRepository {
       0.7;
   Future<void> setAlertThreshold(double v) async =>
       (await SharedPreferences.getInstance()).setDouble(_kAlertThreshold, v);
+
+  Future<bool> getEmojiRainEnabled() async =>
+      (await SharedPreferences.getInstance()).getBool(_kEmojiRainEnabled) ??
+      true;
+  Future<void> setEmojiRainEnabled(bool v) async =>
+      (await SharedPreferences.getInstance()).setBool(_kEmojiRainEnabled, v);
+
+  Future<bool> getFastEmotionResponse() async =>
+      (await SharedPreferences.getInstance()).getBool(_kFastEmotionResponse) ??
+      false;
+  Future<void> setFastEmotionResponse(bool v) async =>
+      (await SharedPreferences.getInstance()).setBool(_kFastEmotionResponse, v);
 }

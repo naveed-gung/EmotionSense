@@ -27,6 +27,14 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
   bool _isCapturing = false;
   String? _alertMessage;
 
+  void _applyRuntimeSettings(SettingsProvider settings) {
+    if (_attrs == null) return;
+    _attrs!.ethnicityEnabled = settings.ethnicityEnabled;
+    _attrs!.targetFps = settings.targetFps;
+    _attrs!.fastEmotionResponse = settings.fastEmotionResponse;
+    _configureAlertFromSettings(settings);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -40,7 +48,7 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
 
       final attrs = FaceAttributesProvider(cam.service);
       _attrs = attrs;
-      _attrs!.ethnicityEnabled = settings.ethnicityEnabled;
+      _applyRuntimeSettings(settings);
 
       // Wire emotion alert callback
       _attrs!.onEmotionAlert = (emotion, confidence, faceIndex) {
@@ -53,9 +61,6 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
           if (mounted) setState(() => _alertMessage = null);
         });
       };
-
-      // Configure alert from settings
-      _configureAlertFromSettings(settings);
 
       _attrs!.addListener(() {
         if (mounted) setState(() {});
@@ -191,6 +196,7 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final camera = context.watch<CameraProvider>();
+    final settings = context.watch<SettingsProvider>();
     final faces = _attrs?.faces ?? const <FaceAttributes>[];
 
     return Scaffold(
@@ -227,15 +233,13 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
                     if (_attrs != null)
                       _FaceCornerBracketOverlay(provider: _attrs!),
 
-                    // Per-face floating labels (emoji + emotion + info)
-                    if (_attrs != null) _FaceLabelsOverlay(faces: faces),
-
                     // Emoji rain particle effect
-                    if (faces.isNotEmpty)
+                    if (faces.isNotEmpty && settings.emojiRainEnabled)
                       EmojiRainWidget(
                         emotion: faces.first.emotion,
-                        intensity: faces.first.confidence,
-                        enabled: true,
+                        intensity: (faces.first.confidence * 0.45)
+                            .clamp(0.0, 1.0),
+                        enabled: settings.emojiRainEnabled,
                       ),
 
                     // Alert banner
@@ -302,26 +306,6 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
                         ),
                       ),
 
-                    // Stats panel (bottom-left)
-                    if (_attrs != null)
-                      Positioned(
-                        bottom: 16,
-                        left: 16,
-                        child: GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  PerformanceDashboardScreen(provider: _attrs!),
-                            ),
-                          ),
-                          child: _StatsPanel(
-                            fps: _attrs!.currentFps,
-                            latency: _attrs!.lastLatencyMs,
-                          ),
-                        ),
-                      ),
-
                     // Comparison mode button (bottom-right, when >=2 faces)
                     if (faces.length >= 2)
                       Positioned(
@@ -382,6 +366,39 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
               ),
             ),
 
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (faces.isNotEmpty) ...[
+                    Expanded(
+                      child: settings.showAgeGender
+                          ? _AttributeSummaryBar(face: faces.first)
+                          : _EmotionSummaryBar(face: faces.first),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  GestureDetector(
+                    onTap: _attrs == null
+                        ? null
+                        : () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => PerformanceDashboardScreen(
+                                  provider: _attrs!,
+                                ),
+                              ),
+                            ),
+                    child: _StatsPanel(
+                      fps: _attrs?.currentFps ?? 0,
+                      latency: _attrs?.lastLatencyMs ?? 0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 12),
 
             // Bottom controls: Gallery | Shutter | Flip
@@ -423,7 +440,8 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
               );
               // Reconfigure alerts after returning from settings
               if (mounted && _attrs != null) {
-                _configureAlertFromSettings(context.read<SettingsProvider>());
+                _applyRuntimeSettings(context.read<SettingsProvider>());
+                setState(() {});
               }
             },
           ),
@@ -665,28 +683,160 @@ class _StatsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.overlay,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.cardBorder, width: 0.5),
+        color: AppColors.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.cardBorder, width: 1),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _StatRow(
-              label: 'FPS',
-              value: fps.toStringAsFixed(1),
-              color: AppColors.accentGold),
-          const SizedBox(height: 2),
-          _StatRow(
-              label: 'LATENCY',
-              value: '${latency.toInt()}ms',
-              color: AppColors.accent),
-          const SizedBox(height: 2),
-          _StatRow(
-              label: 'MODEL', value: 'FACE_V4.2', color: AppColors.textPrimary),
+          _CompactStat(label: 'FPS', value: fps.toStringAsFixed(1), color: AppColors.accentGold),
+          const SizedBox(width: 14),
+          _CompactStat(label: 'LAT', value: '${latency.toInt()}ms', color: AppColors.accent),
+          const SizedBox(width: 14),
+          _CompactStat(label: 'MODEL', value: 'V2', color: AppColors.textPrimary),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactStat extends StatelessWidget {
+  const _CompactStat({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 10,
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AttributeSummaryBar extends StatelessWidget {
+  const _AttributeSummaryBar({required this.face});
+
+  final FaceAttributes face;
+
+  @override
+  Widget build(BuildContext context) {
+    final ethnicity = face.ethnicity;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.cardBorder,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _StatRow(
+              label: 'AGE',
+              value: face.ageRange,
+              color: AppColors.accentGold,
+            ),
+          ),
+          Expanded(
+            child: _StatRow(
+              label: 'GENDER',
+              value: face.gender,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          Expanded(
+            child: _StatRow(
+              label: 'ETHNIC',
+              value: (ethnicity == null || ethnicity.isEmpty)
+                  ? 'Unknown'
+                  : ethnicity,
+              color: ethnicity == null || ethnicity.isEmpty || ethnicity == 'Unknown'
+                  ? AppColors.textTertiary
+                  : AppColors.accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmotionSummaryBar extends StatelessWidget {
+  const _EmotionSummaryBar({required this.face});
+
+  final FaceAttributes face;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.cardBorder, width: 1),
+      ),
+      child: Row(
+        children: [
+          Text(face.emotion.emoji, style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  face.emotion.label,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  '${(face.confidence * 100).round()}% confidence',
+                  style: TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -703,26 +853,27 @@ class _StatRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: 58,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 10,
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.w500,
-            ),
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 10,
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w500,
           ),
         ),
+        const SizedBox(height: 2),
         Text(
           value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: color,
-            fontSize: 10,
+            fontSize: 11,
             fontFamily: 'monospace',
             fontWeight: FontWeight.bold,
           ),
@@ -774,114 +925,6 @@ class _EmotionBars extends StatelessWidget {
           ),
         );
       }),
-    );
-  }
-}
-
-/// Floating labels over each detected face showing emoji + info.
-class _FaceLabelsOverlay extends StatelessWidget {
-  const _FaceLabelsOverlay({required this.faces});
-  final List<FaceAttributes> faces;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final w = constraints.maxWidth;
-        final h = constraints.maxHeight;
-        return Stack(
-          children: faces.asMap().entries.map((entry) {
-            final i = entry.key;
-            final face = entry.value;
-            final faceRect = Rect.fromLTWH(
-              face.rect.left * w,
-              face.rect.top * h,
-              face.rect.width * w,
-              face.rect.height * h,
-            );
-
-            // Label positioned below the face box
-            final labelTop = (faceRect.bottom + 4).clamp(0.0, h - 60);
-            const estLabelW = 200.0;
-            final labelLeft =
-                faceRect.left.clamp(0.0, (w - estLabelW).clamp(0.0, w));
-
-            return Positioned(
-              left: labelLeft,
-              top: labelTop,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.overlay,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.3),
-                      width: 0.5),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      face.emotion.emoji,
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    const SizedBox(width: 4),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          [
-                            face.emotion.label,
-                            if (face.gender != 'Unknown') face.gender,
-                          ].join(' · '),
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          [
-                            if (face.ageRange != '-' && face.ageRange != '~')
-                              face.ageRange.replaceAll('~', ''),
-                            if (face.headEulerAngleY != null)
-                              'Y${face.headEulerAngleY!.toStringAsFixed(0)}°',
-                          ].join(' · '),
-                          style: TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 8,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (faces.length > 1) ...[
-                      const SizedBox(width: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 1),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
-                          color: AppColors.primary.withValues(alpha: 0.3),
-                        ),
-                        child: Text(
-                          '#${i + 1}',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 8,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
-        );
-      },
     );
   }
 }

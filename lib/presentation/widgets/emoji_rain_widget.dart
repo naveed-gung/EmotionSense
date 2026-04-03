@@ -24,9 +24,8 @@ class _EmojiRainWidgetState extends State<EmojiRainWidget>
   late AnimationController _controller;
   final List<_EmojiParticle> _particles = [];
   final _random = Random();
-  Emotion? _lastEmotion;
 
-  static const _maxParticles = 20;
+  static const _maxParticles = 10;
 
   @override
   void initState() {
@@ -47,10 +46,6 @@ class _EmojiRainWidgetState extends State<EmojiRainWidget>
       _controller.stop();
       _particles.clear();
     }
-    if (widget.emotion != _lastEmotion) {
-      _particles.clear();
-      _lastEmotion = widget.emotion;
-    }
   }
 
   @override
@@ -63,7 +58,7 @@ class _EmojiRainWidgetState extends State<EmojiRainWidget>
     if (!mounted || !widget.enabled) return;
 
     // Spawn new particles based on intensity
-    final spawnChance = widget.intensity * 0.3;
+    final spawnChance = widget.intensity * 0.12;
     if (_particles.length < _maxParticles &&
         _random.nextDouble() < spawnChance) {
       _particles.add(_EmojiParticle(

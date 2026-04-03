@@ -1,11 +1,11 @@
 {
-    "name": "emotion_sense",
-    "short_name": "emotion_sense",
+    "name": "EmotionSense",
+    "short_name": "EmotionSense",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0D0D1A",
+    "theme_color": "#4D7CFE",
+    "description": "On-device facial emotion, age, gender, and optional ethnicity analysis built with Flutter.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

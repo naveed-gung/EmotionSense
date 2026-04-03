@@ -253,17 +253,50 @@ class UnifiedTFLiteService {
     }
 
     if (flat.length >= 2) {
-      final femaleProb = flat[0];
-      final maleProb = flat[1];
-      return maleProb > femaleProb
-          ? ('Male', maleProb.clamp(0.0, 1.0))
-          : ('Female', femaleProb.clamp(0.0, 1.0));
+      final rawA = flat[0];
+      final rawB = flat[1];
+      List<double> normalized;
+
+      final sum = rawA + rawB;
+      if (rawA < 0 || rawB < 0 || sum > 1.5) {
+        final maxLogit = math.max(rawA, rawB);
+        final expA = math.exp(rawA - maxLogit);
+        final expB = math.exp(rawB - maxLogit);
+        final expSum = expA + expB;
+        normalized = [expA / expSum, expB / expSum];
+      } else if (sum > 0) {
+        normalized = [rawA / sum, rawB / sum];
+      } else {
+        normalized = [0.5, 0.5];
+      }
+
+      // This model family uses male-first ordering.
+      final maleProb = normalized[0].clamp(0.0, 1.0);
+      final femaleProb = normalized[1].clamp(0.0, 1.0);
+      final confidence = math.max(maleProb, femaleProb);
+      final margin = (maleProb - femaleProb).abs();
+
+      if (margin < 0.12) {
+        return ('Unknown', confidence);
+      }
+
+      return maleProb >= femaleProb
+          ? ('Male', confidence)
+          : ('Female', confidence);
     }
 
-    final prob = flat[0];
-    return prob > 0.5
-        ? ('Male', prob.clamp(0.0, 1.0))
-        : ('Female', (1 - prob).clamp(0.0, 1.0));
+    final femaleProb = flat[0].clamp(0.0, 1.0);
+    final maleProb = (1 - femaleProb).clamp(0.0, 1.0);
+    final confidence = math.max(maleProb, femaleProb);
+    final margin = (maleProb - femaleProb).abs();
+
+    if (margin < 0.12) {
+      return ('Unknown', confidence);
+    }
+
+    return maleProb >= femaleProb
+        ? ('Male', confidence)
+        : ('Female', confidence);
   }
 
   void dispose() {

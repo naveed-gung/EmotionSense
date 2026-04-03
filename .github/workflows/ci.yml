@@ -20,23 +20,33 @@ jobs:
           cache: true
       - name: Flutter version
         run: flutter --version
-      - name: Cache Xcode DerivedData
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Developer/Xcode/DerivedData
-          key: ${{ runner.os }}-deriveddata-${{ hashFiles('ios/Podfile.lock') }}-${{ hashFiles('pubspec.lock') }}-${{ hashFiles('ios/Runner.xcodeproj/project.pbxproj') }}
-          restore-keys: |
-            ${{ runner.os }}-deriveddata-
-      - name: Cache CocoaPods
+      - name: Cache CocoaPods specs
         uses: actions/cache@v4
         with:
           path: |
             ~/Library/Caches/CocoaPods
             ~/.cocoapods
-          key: ${{ runner.os }}-cocoapods-${{ hashFiles('**/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cocoapods-
+          key: cocoapods-specs-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: cocoapods-specs-
+      - name: Cache Pods directory
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: pods-
+      - name: Cache Xcode DerivedData
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: deriveddata-${{ hashFiles('ios/Runner.xcodeproj/project.pbxproj') }}-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: deriveddata-
+      - name: Cache Flutter pub packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+          key: flutter-pub-${{ hashFiles('pubspec.lock') }}
+          restore-keys: flutter-pub-
       - name: Install dependencies
         run: flutter pub get
       - name: Setup CocoaPods

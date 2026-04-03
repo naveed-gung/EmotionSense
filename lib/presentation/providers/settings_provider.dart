@@ -22,6 +22,8 @@ class SettingsProvider extends ChangeNotifier {
   String _modelMode = 'accuracy'; // 'accuracy' or 'speed'
   String _alertEmotion = ''; // empty = disabled
   double _alertThreshold = 0.7;
+  bool _emojiRainEnabled = true;
+  bool _fastEmotionResponse = false;
 
   bool get showAgeGender => _showAgeGender;
   bool get soundOn => _soundOn;
@@ -41,6 +43,8 @@ class SettingsProvider extends ChangeNotifier {
   String get modelMode => _modelMode;
   String get alertEmotion => _alertEmotion;
   double get alertThreshold => _alertThreshold;
+  bool get emojiRainEnabled => _emojiRainEnabled;
+  bool get fastEmotionResponse => _fastEmotionResponse;
 
   SettingsProvider() {
     _init();
@@ -61,6 +65,8 @@ class SettingsProvider extends ChangeNotifier {
     int missingFramesNeutral = 45,
     double autoCaptureConfidence = 0.75,
     int autoCaptureCooldownSec = 8,
+    bool emojiRainEnabled = true,
+    bool fastEmotionResponse = false,
   }) {
     _showAgeGender = showAgeGender;
     _soundOn = soundOn;
@@ -75,6 +81,8 @@ class SettingsProvider extends ChangeNotifier {
     _missingFramesNeutral = missingFramesNeutral;
     _autoCaptureConfidence = autoCaptureConfidence;
     _autoCaptureCooldownSec = autoCaptureCooldownSec;
+    _emojiRainEnabled = emojiRainEnabled;
+    _fastEmotionResponse = fastEmotionResponse;
   }
 
   Future<void> _init() async {
@@ -96,6 +104,8 @@ class SettingsProvider extends ChangeNotifier {
     _modelMode = await _repo.getModelMode();
     _alertEmotion = await _repo.getAlertEmotion();
     _alertThreshold = await _repo.getAlertThreshold();
+    _emojiRainEnabled = await _repo.getEmojiRainEnabled();
+    _fastEmotionResponse = await _repo.getFastEmotionResponse();
     notifyListeners();
   }
 
@@ -204,6 +214,18 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setAlertThreshold(double v) async {
     _alertThreshold = v;
     await _repo.setAlertThreshold(v);
+    notifyListeners();
+  }
+
+  Future<void> setEmojiRainEnabled(bool v) async {
+    _emojiRainEnabled = v;
+    await _repo.setEmojiRainEnabled(v);
+    notifyListeners();
+  }
+
+  Future<void> setFastEmotionResponse(bool v) async {
+    _fastEmotionResponse = v;
+    await _repo.setFastEmotionResponse(v);
     notifyListeners();
   }
 

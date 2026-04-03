@@ -1,412 +1,211 @@
-<div align="center">
-
-<img src="logo.svg" alt="EmotionSense Logo" width="200"/>
-
 # EmotionSense
 
-<<<<<<< HEAD
-**Real-time multi-face emotion, age, gender & head pose analysis with on-device ML**
-=======
-**Real-time facial emotion, age, and gender detection with advanced ML models**
->>>>>>> 6385ec55107389e1a63d9e8c5687c00cbdce8da3
+![EmotionSense brand mark](assets/icons/emotionsense_brand.svg)
 
-<p align="center">
-  A privacy-first Flutter application combining Google ML Kit face detection with TensorFlow Lite models for comprehensive facial analysis — now with multi-face tracking, emoji rain, emotion alerts, comparison mode, and more.
-</p>
+Live, privacy-first facial analysis built with Flutter, Google ML Kit, and TensorFlow Lite.
 
-</div>
+Detect emotion in real time, estimate age and gender on-device, optionally classify ethnicity, and present the results through a mobile camera workflow designed for speed and clarity.
 
----
+## Why EmotionSense
 
-<<<<<<< HEAD
-## Overview
-=======
-## <img src="assets/icons/overview.svg" width="24" align="center" alt="Overview"/> Overview
->>>>>>> 6385ec55107389e1a63d9e8c5687c00cbdce8da3
+EmotionSense is a mobile-first Flutter application focused on local inference. The app analyzes faces directly on the device instead of sending frames to a server, which makes it faster to demo, safer to share, and easier to reason about from a privacy perspective.
 
-EmotionSense is a real-time facial analysis application that processes camera feed to detect emotions, estimate age, classify gender, determine ethnicity, and display head pose angles — all on-device with zero data transmission.
+It is designed around three goals:
 
-### Key Features
+- Deliver a responsive live camera experience with readable output.
+- Keep inference and media handling local to the device.
+- Support a browser-safe preview mode without changing the core mobile pipeline.
 
-<<<<<<< HEAD
-- **Multi-Face Tracking** — Track and label up to 5 faces simultaneously with per-face results and tracking IDs
-- **Real-Time Emotion Detection** — Detects Happy, Sad, Angry, Surprised, Neutral with temporal smoothing
-- **Age & Gender Estimation** — TFLite quantized models with per-face smoothed predictions
-- **Ethnicity Classification** — Optional opt-in ethnicity prediction via combined TFLite model
-- **Head Pose Estimation** — Live yaw/pitch/roll angles from ML Kit landmarks per face
-- **Emotion Alerts** — Configurable notifications when a specific emotion exceeds a threshold
-- **Model Hot-Swapping** — Switch between Accuracy (2 threads) and Speed (4 threads) modes
-- **Live Emoji Rain** — Subtle particle effect matching the detected emotion
-- **Comparison Mode** — Side-by-side two-person emotion comparison when 2+ faces detected
-- **Performance Dashboard** — Developer tools with FPS/latency history charts, model pipeline info, per-face details
-- **3-Screen Onboarding** — Privacy, permissions, and features walkthrough for first-time users
-- **Privacy-First Architecture** — 100% on-device processing, no network requests
+## Highlights
 
----
+- Multi-face tracking with live per-face analysis.
+- Real-time emotion detection with smoothing and optional fast-response mode.
+- On-device age and gender estimation through TFLite models.
+- Optional ethnicity classification controlled from settings.
+- Camera-side comparison and capture workflows.
+- Emoji rain, alerts, onboarding, and saved-history support.
+- Web preview mode for browser demos when native ML features are unavailable.
 
 ## Tech Stack
-=======
-- <img src="assets/icons/emotion.svg" width="18" align="center" alt="Emotion Detection"/> **Real-Time Emotion Detection** - Detects 7 emotions (Happy, Sad, Angry, Surprised, Disgusted, Fearful, Neutral) with temporal smoothing
-- <img src="assets/icons/age.svg" width="18" align="center" alt="Age Estimation"/> **Age Estimation** - Quantized TensorFlow Lite model for age prediction
-- <img src="assets/icons/gender.svg" width="18" align="center" alt="Gender Detection"/> **Gender Detection** - Binary classification with probability-based thresholding
-- <img src="assets/icons/privacy.svg" width="18" align="center" alt="Privacy"/> **Privacy-First Architecture** - 100% on-device processing with no network requests
-- <img src="assets/icons/smoothing.svg" width="18" align="center" alt="Temporal Smoothing"/> **Temporal Smoothing** - 8-frame history with median/majority voting to reduce prediction flickering
 
----
+| Layer | Tools |
+| --- | --- |
+| App framework | Flutter 3.x, Dart 3.x |
+| State management | Provider |
+| Face detection | `google_mlkit_face_detection` |
+| ML inference | `tflite_flutter` |
+| Media and storage | `camera`, `photo_manager`, `shared_preferences`, `path_provider` |
+| UI and polish | Material 3, `google_fonts`, `flutter_animate`, `audioplayers` |
 
-## <img src="assets/icons/tech.svg" width="24" align="center" alt="Technology"/> Tech Stack
->>>>>>> 6385ec55107389e1a63d9e8c5687c00cbdce8da3
+## Platform Support
 
-### Core Framework
+| Platform | Support | Notes |
+| --- | --- | --- |
+| Android | Full | Main target for live camera and local ML. |
+| iOS | Full | Same core experience as Android. |
+| Web | Limited | Preview-safe build only; native camera and ML integrations are intentionally reduced. |
+| Desktop | Partial scaffold | Platform folders exist, but the production experience is still mobile-first. |
 
-| Technology             | Purpose                     |
-| ---------------------- | --------------------------- |
-| **Flutter** (>=3.19.0) | Cross-platform UI framework |
-| **Dart** (>=3.3.0)     | Programming language        |
-| **Provider**           | State management            |
+## Core Models
 
-### Machine Learning
+Bundled local models in `assets/models/`:
 
-| Component                | Technology                          | Details                                    |
-| ------------------------ | ----------------------------------- | ------------------------------------------ |
-| Face Detection           | Google ML Kit                       | Short-range, tracking, landmarks, contours |
-| Age Estimation           | TFLite (`model_lite_age_q`)         | 200×200×3 input, INT8 quantized            |
-| Gender Classification    | TFLite (`model_lite_gender_q`)      | 128×128×3 input, INT8 quantized            |
-| Ethnicity Classification | TFLite (`age_gender_ethnicity_new`) | Combined model, 5-class output             |
-| Emotion Detection        | ML Kit Heuristics                   | Smile + eye + landmark analysis            |
+- `face_detection_short_range.tflite`
+- `model_lite_age_q.tflite`
+- `model_lite_gender_q.tflite`
+- `age_gender_ethnicity_new.tflite`
 
-### Key Dependencies
-
-| Package                       | Purpose                                            | Version |
-| ----------------------------- | -------------------------------------------------- | ------- |
-| `google_mlkit_face_detection` | Face detection with tracking & landmarks           | ^0.13.1 |
-| `tflite_flutter`              | TFLite runtime for age/gender/ethnicity            | ^0.11.0 |
-| `camera`                      | Camera stream & frame capture                      | ^0.11.3 |
-| `provider`                    | State management (Settings, Camera, History, Face) | ^6.0.0  |
-| `image`                       | Image processing & manipulation                    | ^4.0.0  |
-| `shared_preferences`          | Persisted settings storage                         | ^2.2.0  |
-| `google_fonts`                | Poppins font family                                | ^6.0.0  |
-
-### Platform Support
-
-| Platform | Min Version | Status                                 |
-| -------- | ----------- | -------------------------------------- |
-| Android  | API 21+     | ✅ Supported                           |
-| iOS      | 16.0+       | ✅ Supported                           |
-| Web      | —           | ❌ Not supported (native dependencies) |
-
----
-
-<<<<<<< HEAD
 ## Getting Started
-=======
-## <img src="assets/icons/getting-started.svg" width="24" align="center" alt="Getting Started"/> Getting Started
->>>>>>> 6385ec55107389e1a63d9e8c5687c00cbdce8da3
 
 ### Prerequisites
 
-- Flutter SDK >=3.19.0
-- Dart >=3.3.0
-- Android SDK 21+ or iOS 16.0+
+- Flutter SDK available in the local environment.
+- Android Studio or Xcode, depending on the device target.
+- A connected device or emulator if you want the full experience.
 
-### Installation
+### Install Dependencies
 
 ```bash
-git clone <repository-url>
-cd EmotionSense
 flutter pub get
-flutter run
 ```
 
-### Platform-Specific Setup
-
-**Android:** `flutter run -d <device-id>`
-
-**iOS:**
+### Run On A Device
 
 ```bash
-cd ios && pod install && cd ..
 flutter run -d <device-id>
 ```
 
----
+### Run On An Android Emulator
 
-<<<<<<< HEAD
-## Architecture
-=======
-## <img src="assets/icons/architecture.svg" width="24" align="center" alt="Architecture"/> Architecture
->>>>>>> 6385ec55107389e1a63d9e8c5687c00cbdce8da3
+This repo already supports an emulator-focused path for `x86_64`:
 
-### ML Pipeline
-
-```
-Camera Frame
-    ↓
-ML Kit Face Detection (up to 5 faces, tracking IDs, landmarks)
-    ↓
-┌─────────────────────────────────────────────┐
-│  For each detected face:                    │
-│  1. Crop & resize (200×200 age, 128×128 gen)│
-│  2. TFLite inference (age, gender, ethnicity)│
-│  3. ML Kit heuristic emotion classification │
-│  4. Head pose angles (yaw/pitch/roll)       │
-│  5. Per-face temporal smoothing (by ID)     │
-│  6. Emotion alert check                     │
-└─────────────────────────────────────────────┘
-    ↓
-UI: Corner brackets + floating labels + emoji rain + comparison
+```bash
+flutter run -d emulator-5554 --target-platform android-x64
 ```
 
-### Emotion Detection Criteria
+### Run The Web Preview
 
-<<<<<<< HEAD
-| Emotion      | Detection Method                              |
-| ------------ | --------------------------------------------- |
-| 😄 Happy     | `smilingProbability > 0.70`                   |
-| 😢 Sad       | `smilingProbability < 0.30` + frown detection |
-| 😠 Angry     | Low smile + brow compression + face energy    |
-| 😲 Surprised | Wide eyes + mouth open                        |
-| 😐 Neutral   | Default fallback                              |
-=======
-Utilizes **Google ML Kit Face Detection** with multi-factor analysis:
+If you want a browser-safe shell without relying on a local Edge configuration:
 
-| Emotion                                                                               | Detection Criteria                |
-| ------------------------------------------------------------------------------------- | --------------------------------- |
-| <img src="assets/icons/happy.svg" width="16" alt="Happy"/> **Happy**                 | `smilingProbability > 0.70`       |
-| <img src="assets/icons/sad.svg" width="16" alt="Sad"/> **Sad**                       | `smilingProbability < 0.30`       |
-| <img src="assets/icons/neutral.svg" width="16" alt="Neutral"/> **Neutral**           | `smilingProbability 0.30-0.70`    |
-| <img src="assets/icons/surprised.svg" width="16" alt="Surprised"/> **Surprised**     | Eyes wide open + mouth open       |
-| <img src="assets/icons/angry.svg" width="16" alt="Angry"/> **Angry**                 | Low smile + specific eye patterns |
-| <img src="assets/icons/disgusted.svg" width="16" alt="Disgusted"/> **Disgusted**     | Face contortion detection         |
-| <img src="assets/icons/fearful.svg" width="16" alt="Fearful"/> **Fearful**           | Wide eyes + low smile             |
-
-**Smoothing:** 5-frame history with majority voting to prevent jitter
->>>>>>> 6385ec55107389e1a63d9e8c5687c00cbdce8da3
-
-### Project Structure
-
+```bash
+flutter run -d web-server --web-hostname 127.0.0.1 --web-port 8080
 ```
+
+Or use a browser target directly when available:
+
+```bash
+flutter run -d chrome
+```
+
+## Project Structure
+
+```text
 lib/
-├── app.dart                          # AppColors, theme, routing (onboarding/camera)
-├── main.dart                         # Entry point
-├── core/
-│   ├── constants/emotions.dart       # Emotion enum + display extensions
-│   └── utils/                        # Permission manager
-├── data/
-│   ├── models/                       # AgeGenderData, etc.
-│   └── repositories/
-│       └── settings_repository.dart  # SharedPreferences persistence
-├── presentation/
-│   ├── providers/
-│   │   ├── face_attributes_provider.dart  # Multi-face ML orchestration
-│   │   ├── settings_provider.dart         # All app settings state
-│   │   ├── camera_provider.dart           # Camera controller state
-│   │   └── history_provider.dart          # Capture history state
-│   ├── screens/
-│   │   ├── onboarding_screen.dart         # 3-page onboarding flow
-│   │   ├── settings_screen.dart           # Full settings (model, alerts, etc.)
-│   │   ├── analysis_result_screen.dart    # Capture result display
-│   │   ├── comparison_screen.dart         # 2-person side-by-side comparison
-│   │   └── performance_dashboard_screen.dart  # Dev tools dashboard
-│   └── widgets/
-│       └── emoji_rain_widget.dart         # Particle effect widget
-├── services/
-│   ├── mlkit_face_service.dart       # ML Kit wrapper + emotion heuristics
-│   └── unified_tflite_service.dart   # TFLite model manager + hot-swap
-├── ui/
-│   └── camera_view.dart              # Main camera screen + overlays
-└── utils/
-    ├── image_converter.dart          # YUV→RGB conversion
-    └── image_preprocess.dart         # Normalization modes
+  app.dart
+  main.dart
+  core/
+  data/
+  presentation/
+  services/
+  ui/
+  utils/
+assets/
+  icons/
+  models/
+  sounds/
+scripts/
+test/
+web/
+android/
+ios/
 ```
 
----
+## Runtime Flow
 
-<<<<<<< HEAD
-## Screens
-=======
-## <img src="assets/icons/tech.svg" width="24" align="center" alt="Technical Specifications"/> Technical Specifications
->>>>>>> 6385ec55107389e1a63d9e8c5687c00cbdce8da3
+1. The camera provider streams frames on-device.
+2. ML Kit detects faces, landmarks, and tracking information.
+3. Face crops are normalized for the TFLite pipeline.
+4. Age, gender, and optional ethnicity are inferred locally.
+5. Emotion is derived and smoothed before UI presentation.
+6. The camera view, result screens, and comparison flow render the final state.
 
-### Camera View (Main)
+## Product Experience
 
-- Live camera preview with blue corner-bracket face overlays
-- Per-face floating labels: emoji + emotion + gender + age + head pose yaw
-- Face count badge when multiple faces detected
-- FPS/latency stats panel (tap to open Performance Dashboard)
-- Emotion confidence bars
-- Compare button (appears with 2+ faces)
-- Emoji rain particle effect
-- Emotion alert banner
-- Privacy toggle, flash toggle, camera flip
+### Live Camera
 
-### Onboarding (3 Screens)
-
-1. **Privacy** — Explains on-device processing, zero data transmission
-2. **Camera Access** — Explains camera permission requirement
-3. **Features** — Highlights multi-face, head pose, alerts, comparison
+- Face brackets and clean live overlays.
+- Horizontal stats panel below the preview.
+- Separate summary presentation for demographics and emotion.
+- Optional emoji rain and fast emotion response.
 
 ### Settings
 
-- **Analysis** — Sensitivity slider, analysis FPS control, temporal smoothing
-- **Classification** — Age/gender toggle, ethnicity opt-in
-- **Model** — Performance mode toggle (Accuracy 🎯 vs Speed ⚡)
-- **Emotion Alerts** — Select emotion, set confidence threshold
-- **Capture** — Auto-capture, confidence threshold, cooldown
-- **Feedback** — Sound effects, haptic feedback
-- **Privacy** — Zero-cloud promise display
+- Detection sensitivity.
+- Analysis FPS.
+- Fast emotion response toggle.
+- Emoji rain toggle.
+- Age and gender display toggle.
+- Ethnicity classification toggle.
+- Alert and capture behavior.
 
-### Analysis Result
+### Results And Comparison
 
-- Captured image with face corner brackets
-- Large emoji + emotion name + confidence percentage
-- Gender, age, ethnicity chips
-- Save to history or discard
+- Capture review flow.
+- Side-by-side comparison mode when multiple faces are present.
+- History access for saved outputs.
 
-### Comparison Mode
+## Web Mode
 
-- Side-by-side cards for Person 1 and Person 2
-- Full attribute display per person (emotion, gender, age, ethnicity, head pose)
-- Emotion match/mismatch summary
+The web build is intentionally framed as a preview, not a feature-complete port of the mobile ML pipeline. It exists so the app can launch in a browser, demonstrate structure and UI, and avoid breaking on native-only integrations.
 
-### Performance Dashboard
+If you need the full camera and inference stack, use Android or iOS.
 
-- Live FPS, latency, face count metric cards
-- FPS and latency history mini-charts
-- Model pipeline breakdown (5 stages)
-- Per-face detail cards with tracking IDs
-
----
-
-<<<<<<< HEAD
-## Settings Reference
-
-| Setting                  | Default  | Range                                 | Description                           |
-| ------------------------ | -------- | ------------------------------------- | ------------------------------------- |
-| Detection Sensitivity    | 60%      | 30–90%                                | Face detection confidence threshold   |
-| Analysis FPS             | 15       | 5–30                                  | Target frames per second for analysis |
-| Show Age & Gender        | On       | —                                     | Display demographic predictions       |
-| Ethnicity Classification | On       | —                                     | Opt-in ethnicity prediction           |
-| Performance Mode         | Accuracy | Accuracy/Speed                        | Thread count for TFLite inference     |
-| Alert Emotion            | Off      | Off/Happy/Sad/Angry/Surprised/Neutral | Emotion to monitor                    |
-| Alert Threshold          | 70%      | 30–95%                                | Confidence to trigger alert           |
-| Auto Capture             | On       | —                                     | Auto-capture on strong emotion        |
-| Sound Effects            | On       | —                                     | Enable/disable sounds                 |
-| Haptic Feedback          | On       | —                                     | Enable/disable haptic                 |
-
----
-
-## Privacy & Security
-=======
-## <img src="assets/icons/privacy.svg" width="24" align="center" alt="Privacy and Security"/> Privacy & Security
-
-<table>
-<tr>
-<td><img src="assets/icons/on-device.svg" width="24" alt="On-Device Processing"/></td>
-<td><b>100% On-Device Processing</b><br/>All ML inference runs locally</td>
-</tr>
-<tr>
-<td><img src="assets/icons/no-network.svg" width="24" alt="No Network Requests"/></td>
-<td><b>No Network Requests</b><br/>Zero data transmission to external servers</td>
-</tr>
-<tr>
-<td><img src="assets/icons/no-analytics.svg" width="24" alt="No Analytics or Telemetry"/></td>
-<td><b>No Analytics/Telemetry</b><br/>No user tracking or behavior analysis</td>
-</tr>
-<tr>
-<td><img src="assets/icons/local-storage.svg" width="24" alt="Local Storage Only"/></td>
-<td><b>Local Storage Only</b><br/>Photos saved locally with user consent</td>
-</tr>
-</table>
-
----
-
-## <img src="assets/icons/tech.svg" width="24" align="center" alt="Performance"/> Performance
->>>>>>> 6385ec55107389e1a63d9e8c5687c00cbdce8da3
-
-| Guarantee                  | Details                                         |
-| -------------------------- | ----------------------------------------------- |
-| **100% On-Device**         | All ML inference runs locally on the device     |
-| **No Network Requests**    | Zero data transmission to external servers      |
-| **No Analytics**           | No tracking, telemetry, or behavior analysis    |
-| **Local Storage Only**     | Photos saved locally with explicit user consent |
-| **Camera-Only Permission** | No microphone, contacts, or location access     |
-
----
-
-<<<<<<< HEAD
-## Performance
-=======
-## <img src="assets/icons/build.svg" width="24" align="center" alt="Build and Deployment"/> Build & Deployment
->>>>>>> 6385ec55107389e1a63d9e8c5687c00cbdce8da3
-
-| Metric           | Value                                               |
-| ---------------- | --------------------------------------------------- |
-| Processing Speed | ~10–15 FPS (accuracy mode), ~15–25 FPS (speed mode) |
-| Latency          | <100ms per frame (detection + inference)            |
-| Memory           | ~150MB (includes loaded ML models)                  |
-| Max Faces        | 5 simultaneously tracked                            |
-| Smoothing        | 8-frame history (age/gender), 5-frame (emotion)     |
-
----
-
-## Build & Deployment
+## Build Commands
 
 ```bash
-# Debug
+# Debug APK
 flutter build apk --debug
+
+# Emulator-friendly debug APK
+flutter build apk --debug --target-platform android-x64
 
 # Release APK
 flutter build apk --release
 
-# iOS
+# Web build
+flutter build web
+
+# iOS release build
 flutter build ios --release
 ```
 
-<<<<<<< HEAD
----
+## Branding Notes
+
+- The launcher icon and favicon are generated from the same badge used in the app settings header.
+- The README uses a dedicated SVG wordmark for cleaner presentation.
+- Legacy root logos were removed so there is a single current branding direction.
+
+## Regenerating Icons
+
+```bash
+python scripts/generate_brand_icons.py
+dart run flutter_launcher_icons
+```
+
+## Troubleshooting
+
+### Browser launches but detection is limited
+
+That is expected in preview mode. Use Android or iOS for the full camera-and-ML flow.
+
+### Android debug builds pause for a long time
+
+Cold Gradle and Flutter artifact downloads can make the first build feel stuck. Subsequent runs are usually much faster once caches are warm.
+
+### Branding changes do not appear immediately
+
+Regenerate icons, then rebuild the target platform so cached launcher assets are refreshed.
 
 ## License
 
-MIT License — See [LICENSE](LICENSE) for details
-=======
-### <img src="assets/icons/github.svg" width="20" align="center" alt="GitHub Actions"/> Automated CI/CD
-
-This project includes a **pre-configured GitHub Actions workflow** for automated iOS IPA generation:
-
-- <img src="assets/icons/automated-build.svg" width="16" align="center" alt="Automated IPA Builds"/> **Automated IPA Builds** - GitHub workflow automatically generates unsigned IPA on push/release
-- <img src="assets/icons/trollstore.svg" width="16" align="center" alt="TrollStore Compatible"/> **TrollStore Compatible** - Ready for TrollStore permanent installation (iOS 14.0-16.6.1)
-- <img src="assets/icons/sideload.svg" width="16" align="center" alt="Sideloading Ready"/> **Sideloading Ready** - Works with AltStore, Sideloadly, or any standard sideloading method
-
-**Installation Options:**
-
-- **TrollStore:** Permanent installation without re-signing (recommended for jailbroken/exploited devices)
-- **AltStore/Sideloadly:** 7-day signing with free Apple ID, 1-year with paid developer account
-- **Xcode:** Direct installation via cable for development/testing
-
-Check the `.github/workflows/` directory for CI configuration details.
-
----
-
-## <img src="assets/icons/dependencies.svg" width="24" align="center" alt="Dependencies"/> Dependencies
-
-- `google_ml_kit_face_detection` - Face detection
-- `tflite_flutter` - TensorFlow Lite runtime
-- `camera` - Camera access
-- `provider` - State management
-- `image` - Image processing
-
----
-
-## <img src="assets/icons/license.svg" width="24" align="center" alt="License"/> License
-
-MIT License - See [LICENSE](LICENSE) for details
->>>>>>> 6385ec55107389e1a63d9e8c5687c00cbdce8da3
-
----
-
-<div align="center">
-
-**Built with Flutter, TensorFlow Lite & Google ML Kit**
-
-</div>
+This repository currently does not expose a dedicated license file in the workspace root. Add one if you want the project to communicate explicit reuse terms.

@@ -183,50 +183,45 @@ class MLKitFaceService {
 
   String inferEmotion(double? smilingProbability, double? leftEyeOpen,
       double? rightEyeOpen, Face? face) {
-    if (smilingProbability == null) return 'Neutral';
-
-    bool isFrowning = false;
-    if (face != null) {
-      final frownData = _detectFrown(face);
-      isFrowning = frownData['isFrowning'] as bool;
-      final yDiff = frownData['yDifference'] as double;
-      debugPrint(
-          '[MLKit] Frown detection: $isFrowning, YDiff: ${yDiff.toStringAsFixed(1)}');
-    }
+    final smile = smilingProbability ?? 0.5;
+    final leftEye = leftEyeOpen ?? 0.8;
+    final rightEye = rightEyeOpen ?? 0.8;
+    final avgEye = (leftEye + rightEye) / 2;
 
     debugPrint(
-        '[MLKit] 📊 SmileProb: ${smilingProbability.toStringAsFixed(3)}, Frown: $isFrowning');
+      '[MLKit] Emotion inputs: smile=${smile.toStringAsFixed(3)}, '
+      'leftEye=${leftEye.toStringAsFixed(3)}, '
+      'rightEye=${rightEye.toStringAsFixed(3)}',
+    );
 
-    if (smilingProbability > smileThresholdHappy) {
+    if (avgEye > 0.90 && smile > 0.20 && smile < 0.65) {
+      debugPrint('[MLKit] 😲 SURPRISED - Wide-open eyes with moderate smile');
+      return 'Surprised';
+    }
+
+    if (smile > smileThresholdHappy) {
       debugPrint('[MLKit] 😊 HAPPY - Clear smile detected');
       return 'Happy';
     }
 
-    if (smilingProbability < 0.15 && isFrowning) {
+    if (avgEye < 0.45 && smile < 0.25) {
+      debugPrint('[MLKit] 😠 ANGRY - Narrowed eyes with low smile');
+      return 'Angry';
+    }
+
+    if (face != null) {
+      final frownData = _detectFrown(face);
+      final isFrowning = frownData['isFrowning'] as bool;
+      final yDiff = frownData['yDifference'] as double;
       debugPrint(
-          '[MLKit] 😢 SAD - Very low smile (${smilingProbability.toStringAsFixed(3)}) AND frown detected');
-      return 'Sad';
-    }
-
-    if (smilingProbability < 0.15 && !isFrowning) {
-      final avgEyeOpen = ((leftEyeOpen ?? 0.5) + (rightEyeOpen ?? 0.5)) / 2;
-      if (avgEyeOpen > 0.2 && avgEyeOpen < 0.7) {
-        debugPrint(
-            '[MLKit] 😠 ANGRY - Low smile: ${smilingProbability.toStringAsFixed(3)}, narrow eyes');
-        return 'Angry';
+          '[MLKit] Frown detection: $isFrowning, YDiff: ${yDiff.toStringAsFixed(1)}');
+      if (isFrowning && smile < 0.30) {
+        debugPrint('[MLKit] 😢 SAD - Frown geometry with low smile');
+        return 'Sad';
       }
     }
 
-    if (smilingProbability > 0.3 && smilingProbability < 0.65) {
-      final avgEyeOpen = ((leftEyeOpen ?? 0.5) + (rightEyeOpen ?? 0.5)) / 2;
-      if (avgEyeOpen > 0.85) {
-        debugPrint('[MLKit] 😲 SURPRISED - Wide eyes, moderate smile');
-        return 'Surprised';
-      }
-    }
-
-    debugPrint(
-        '[MLKit] 😐 NEUTRAL - Smile: ${smilingProbability.toStringAsFixed(3)} (no strong emotion detected)');
+    debugPrint('[MLKit] 😐 NEUTRAL - No stronger emotion matched');
     return 'Neutral';
   }
 

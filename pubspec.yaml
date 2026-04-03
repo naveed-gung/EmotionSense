@@ -36,10 +36,29 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   mockito: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icons/app_icon.png
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: assets/icons/app_icon.png
+    background_color: "#0D0D1A"
+    theme_color: "#4D7CFE"
+  windows:
+    generate: true
+    image_path: assets/icons/app_icon.png
+  macos:
+    generate: true
+    image_path: assets/icons/app_icon.png
 
 flutter:
   uses-material-design: true
   assets:
+    - assets/icons/
     - assets/models/face_detection_short_range.tflite
     - assets/models/model_lite_age_q.tflite
     - assets/models/model_lite_gender_q.tflite

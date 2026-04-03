@@ -60,6 +60,7 @@ class FaceAttributesProvider extends ChangeNotifier {
   bool _running = false;
   bool _busy = false;
   bool ethnicityEnabled = true;
+  bool fastEmotionResponse = false;
   int _skip = 0;
   int targetFps = 8;
   int _notifyThrottle = 0;
@@ -82,8 +83,13 @@ class FaceAttributesProvider extends ChangeNotifier {
   final Map<int, List<int>> _ageHistoryMap = {};
   final Map<int, List<String>> _genderHistoryMap = {};
   final Map<int, List<String>> _ethnicityHistoryMap = {};
-  static const int historyLength = 5;
+  final Map<int, Float32List> _ageBuffer = {};
+  final Map<int, Float32List> _genderBuffer = {};
+  final Map<int, Float32List> _ethBuffer = {};
   static const int attributeHistoryLength = 8;
+
+  int get _emotionHistoryLength => fastEmotionResponse ? 3 : 5;
+  double get _emotionMajorityRatio => fastEmotionResponse ? 0.34 : 0.5;
 
   // Emotion alert callback
   void Function(Emotion emotion, double confidence, int faceIndex)?
@@ -132,6 +138,9 @@ class FaceAttributesProvider extends ChangeNotifier {
     await _camera.stopImageStream();
     _faces.clear();
     _emaConfidence.clear();
+    _ageBuffer.clear();
+    _genderBuffer.clear();
+    _ethBuffer.clear();
   }
 
   @override
@@ -281,7 +290,7 @@ class FaceAttributesProvider extends ChangeNotifier {
         // Per-face emotion smoothing
         _expressionHistoryMap.putIfAbsent(trackingId, () => []);
         _expressionHistoryMap[trackingId]!.add(rawEmotion);
-        if (_expressionHistoryMap[trackingId]!.length > historyLength) {
+        if (_expressionHistoryMap[trackingId]!.length > _emotionHistoryLength) {
           _expressionHistoryMap[trackingId]!.removeAt(0);
         }
         final smoothedEmotion = _getSmoothedEmotionFor(trackingId);
@@ -312,6 +321,7 @@ class FaceAttributesProvider extends ChangeNotifier {
                 hasUV ? (image.planes[1].bytesPerPixel ?? 1) : 1;
 
             final ageSz = _tfliteService.ageInputSize;
+            _ageBuffer[trackingId] ??= Float32List(ageSz * ageSz * 3);
             final ageInput = yuvToRgbInput(
               image.planes[0].bytes,
               uBytes,
@@ -324,9 +334,11 @@ class FaceAttributesProvider extends ChangeNotifier {
               ageSz,
               ageSz,
               mode: NormalizationMode.standard,
+              outBuffer: _ageBuffer[trackingId],
             );
 
             final genSz = _tfliteService.genderInputSize;
+            _genderBuffer[trackingId] ??= Float32List(genSz * genSz * 3);
             final genderInput = yuvToRgbInput(
               image.planes[0].bytes,
               uBytes,
@@ -339,11 +351,13 @@ class FaceAttributesProvider extends ChangeNotifier {
               genSz,
               genSz,
               mode: NormalizationMode.standard,
+              outBuffer: _genderBuffer[trackingId],
             );
 
             Float32List? ethInput;
             if (_tfliteService.hasEthnicity && ethnicityEnabled) {
               final ethSz = _tfliteService.ethnicityInputSize;
+              _ethBuffer[trackingId] ??= Float32List(ethSz * ethSz * 3);
               ethInput = yuvToRgbInput(
                 image.planes[0].bytes,
                 uBytes,
@@ -356,6 +370,7 @@ class FaceAttributesProvider extends ChangeNotifier {
                 ethSz,
                 ethSz,
                 mode: NormalizationMode.standard,
+                outBuffer: _ethBuffer[trackingId],
               );
             }
 
@@ -471,11 +486,27 @@ class FaceAttributesProvider extends ChangeNotifier {
   Emotion _getSmoothedEmotionFor(int trackingId) {
     final history = _expressionHistoryMap[trackingId];
     if (history == null || history.isEmpty) return Emotion.neutral;
+
+    if (fastEmotionResponse && history.length >= 2) {
+      final last = history[history.length - 1];
+      final previous = history[history.length - 2];
+      if (last == previous && last != Emotion.neutral) {
+        return last;
+      }
+    }
+
     final counts = <Emotion, int>{};
-    for (var emotion in history) {
+    for (final emotion in history) {
       counts[emotion] = (counts[emotion] ?? 0) + 1;
     }
-    return counts.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+
+    final best = counts.entries.reduce((a, b) => a.value > b.value ? a : b);
+    final threshold = (history.length * _emotionMajorityRatio).ceil();
+    if (best.value >= threshold) {
+      return best.key;
+    }
+
+    return history.last;
   }
 
   int _getSmoothedAgeFor(int trackingId) {
