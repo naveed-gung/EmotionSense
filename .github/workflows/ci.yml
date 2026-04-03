@@ -1,70 +1,113 @@
 name: Build Mobile Artifacts
 
 on:
-    push:
-        branches:
-            - main
-    workflow_dispatch:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: mobile-artifacts-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-    build:
-        runs-on: macos-latest
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
 
-            - name: Set up Java
-              uses: actions/setup-java@v4
-              with:
-                  distribution: temurin
-                  java-version: "17"
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
 
-            - name: Set up Flutter
-              uses: subosito/flutter-action@v2
-              with:
-                  channel: stable
-                  cache: true
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
 
-            - name: Install dependencies
-              run: flutter pub get
+      - name: Install dependencies
+        run: flutter pub get
 
-            - name: Build unsigned IPA
-              run: flutter build ipa --release --no-codesign
+      - name: Build release APK
+        run: flutter build apk --release --no-pub
 
-            - name: Build release APK
-              run: flutter build apk --release
+      - name: Prepare APK artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
 
-            - name: Prepare renamed artifacts
-              shell: bash
-              run: |
-                  set -euo pipefail
-                  mkdir -p dist
+          apk_path="build/app/outputs/flutter-apk/app-release.apk"
+          if [[ ! -f "$apk_path" ]]; then
+            echo "APK file not found at $apk_path"
+            exit 1
+          fi
 
-                  ipa_path="$(find build/ios/ipa -maxdepth 1 -name '*.ipa' | head -n 1)"
-                  if [[ -z "$ipa_path" ]]; then
-                    echo "IPA file not found in build/ios/ipa"
-                    exit 1
-                  fi
-                  cp "$ipa_path" dist/emotion-sense.ipa
+          cp "$apk_path" dist/emotion-sense.apk
 
-                  apk_path="build/app/outputs/flutter-apk/app-release.apk"
-                  if [[ ! -f "$apk_path" ]]; then
-                    echo "APK file not found at $apk_path"
-                    exit 1
-                  fi
-                  cp "$apk_path" dist/emotion-sense.apk
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emotion-sense-apk
+          path: dist/emotion-sense.apk
+          if-no-files-found: error
 
-            - name: Upload IPA artifact
-              uses: actions/upload-artifact@v4
-              with:
-                  name: emotion-sense-ipa
-                  path: dist/emotion-sense.ipa
-                  if-no-files-found: error
+  build-ios:
+    name: Build iOS IPA
+    runs-on: macos-latest
+    timeout-minutes: 12
 
-            - name: Upload APK artifact
-              uses: actions/upload-artifact@v4
-              with:
-                  name: emotion-sense-apk
-                  path: dist/emotion-sense.apk
-                  if-no-files-found: error
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build unsigned iOS app
+        run: flutter build ios --release --no-codesign --no-pub
+
+      - name: Package IPA artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist Payload
+
+          app_path="build/ios/iphoneos/Runner.app"
+          if [[ ! -d "$app_path" ]]; then
+            echo "Runner.app not found at $app_path"
+            exit 1
+          fi
+
+          cp -R "$app_path" Payload/Runner.app
+          ditto -c -k --sequesterRsrc --keepParent Payload dist/emotion-sense.ipa
+          rm -rf Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emotion-sense-ipa
+          path: dist/emotion-sense.ipa
+          if-no-files-found: error
