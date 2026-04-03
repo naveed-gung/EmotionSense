@@ -237,8 +237,8 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
                     if (faces.isNotEmpty && settings.emojiRainEnabled)
                       EmojiRainWidget(
                         emotion: faces.first.emotion,
-                        intensity: (faces.first.confidence * 0.45)
-                            .clamp(0.0, 1.0),
+                        intensity:
+                            (faces.first.confidence * 0.45).clamp(0.0, 1.0),
                         enabled: settings.emojiRainEnabled,
                       ),
 
@@ -692,11 +692,18 @@ class _StatsPanel extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _CompactStat(label: 'FPS', value: fps.toStringAsFixed(1), color: AppColors.accentGold),
+          _CompactStat(
+              label: 'FPS',
+              value: fps.toStringAsFixed(1),
+              color: AppColors.accentGold),
           const SizedBox(width: 14),
-          _CompactStat(label: 'LAT', value: '${latency.toInt()}ms', color: AppColors.accent),
+          _CompactStat(
+              label: 'LAT',
+              value: '${latency.toInt()}ms',
+              color: AppColors.accent),
           const SizedBox(width: 14),
-          _CompactStat(label: 'MODEL', value: 'V2', color: AppColors.textPrimary),
+          _CompactStat(
+              label: 'MODEL', value: 'V2', color: AppColors.textPrimary),
         ],
       ),
     );
@@ -784,7 +791,9 @@ class _AttributeSummaryBar extends StatelessWidget {
               value: (ethnicity == null || ethnicity.isEmpty)
                   ? 'Unknown'
                   : ethnicity,
-              color: ethnicity == null || ethnicity.isEmpty || ethnicity == 'Unknown'
+              color: ethnicity == null ||
+                      ethnicity.isEmpty ||
+                      ethnicity == 'Unknown'
                   ? AppColors.textTertiary
                   : AppColors.accent,
             ),

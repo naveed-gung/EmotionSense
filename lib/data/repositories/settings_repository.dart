@@ -25,8 +25,8 @@ class SettingsRepository {
   static const _kModelMode = 'model_mode'; // 'accuracy' or 'speed'
   static const _kAlertEmotion = 'alert_emotion'; // emotion name or empty
   static const _kAlertThreshold = 'alert_threshold'; // 0.0..1.0
-    static const _kEmojiRainEnabled = 'emoji_rain_enabled';
-    static const _kFastEmotionResponse = 'fast_emotion_response';
+  static const _kEmojiRainEnabled = 'emoji_rain_enabled';
+  static const _kFastEmotionResponse = 'fast_emotion_response';
 
   Future<bool> getShowAgeGender() async =>
       (await SharedPreferences.getInstance()).getBool(_kShowAgeGender) ?? true;
