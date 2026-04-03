@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:emotion_sense/app.dart';
 import 'package:emotion_sense/core/constants/emotions.dart';
@@ -10,6 +9,7 @@ import 'package:emotion_sense/presentation/screens/comparison_screen.dart';
 import 'package:emotion_sense/presentation/screens/performance_dashboard_screen.dart';
 import 'package:emotion_sense/presentation/screens/settings_screen.dart';
 import 'package:emotion_sense/presentation/widgets/emoji_rain_widget.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -32,8 +32,11 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final cam = context.read<CameraProvider>();
+      final settings = context.read<SettingsProvider>();
       await cam.initialize();
+      if (!mounted) return;
 
       final attrs = FaceAttributesProvider(cam.service);
       _attrs = attrs;
@@ -51,14 +54,19 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
       };
 
       // Configure alert from settings
-      final settings = context.read<SettingsProvider>();
       _configureAlertFromSettings(settings);
 
       _attrs!.addListener(() {
         if (mounted) setState(() {});
       });
       await _attrs!.start();
-      if (mounted) setState(() {});
+      if (!mounted) {
+        await _attrs?.stop();
+        _attrs?.dispose();
+        _attrs = null;
+        return;
+      }
+      setState(() {});
     });
   }
 
@@ -152,7 +160,13 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
       }
 
       // Resume detection
-      await Future.delayed(Duration(milliseconds: Platform.isIOS ? 500 : 350));
+        final resumeDelay = kIsWeb
+          ? Duration.zero
+          : Duration(
+            milliseconds:
+              defaultTargetPlatform == TargetPlatform.iOS ? 500 : 350,
+          );
+        await Future.delayed(resumeDelay);
       if (!mounted) return;
       try {
         await _attrs?.start();

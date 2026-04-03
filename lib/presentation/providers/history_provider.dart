@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:emotion_sense/core/constants/emotions.dart';
 import 'package:emotion_sense/data/models/age_gender_data.dart';
 import 'package:emotion_sense/data/repositories/history_repository.dart';
@@ -27,8 +25,6 @@ class HistoryProvider extends ChangeNotifier {
     required double confidence,
     AgeGenderData? ageGender,
   }) async {
-    // Persist image into an app-managed folder; fall back to original path on error.
-    if (!await File(imagePath).exists()) return imagePath;
     final persistedPath = await _repo.persistImage(imagePath);
     final entry = HistoryEntry(
       imagePath: persistedPath,

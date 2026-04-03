@@ -98,13 +98,18 @@ class FaceAttributesProvider extends ChangeNotifier {
   Future<void> start() async {
     if (_running) return;
 
-    if (!kIsWeb) {
-      await _mlkitService.initialize();
-      try {
-        await _tfliteService.initialize();
-      } catch (e) {
-        debugPrint('[FaceProvider] TFLite init failed, ML Kit only: $e');
-      }
+    if (kIsWeb) {
+      _running = true;
+      _faces.clear();
+      notifyListeners();
+      return;
+    }
+
+    await _mlkitService.initialize();
+    try {
+      await _tfliteService.initialize();
+    } catch (e) {
+      debugPrint('[FaceProvider] TFLite init failed, ML Kit only: $e');
     }
 
     await _camera.startImageStream();
@@ -115,6 +120,12 @@ class FaceAttributesProvider extends ChangeNotifier {
 
   Future<void> stop() async {
     _running = false;
+    if (kIsWeb) {
+      _faces.clear();
+      _emaConfidence.clear();
+      notifyListeners();
+      return;
+    }
     await _imageStreamSubscription?.cancel();
     _imageStreamSubscription = null;
     await _camera.stopImageStream();

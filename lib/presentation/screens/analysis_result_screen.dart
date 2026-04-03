@@ -1,9 +1,9 @@
-import 'dart:io';
 import 'package:emotion_sense/app.dart';
 import 'package:emotion_sense/core/constants/emotions.dart';
 import 'package:emotion_sense/data/models/age_gender_data.dart';
 import 'package:emotion_sense/presentation/providers/face_attributes_provider.dart';
 import 'package:emotion_sense/presentation/providers/history_provider.dart';
+import 'package:emotion_sense/presentation/widgets/platform_path_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -99,8 +99,8 @@ class AnalysisResultScreen extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.file(
-                        File(imagePath),
+                      PlatformPathImage(
+                        path: imagePath,
                         fit: BoxFit.cover,
                       ),
                       // Corner brackets overlay on face area

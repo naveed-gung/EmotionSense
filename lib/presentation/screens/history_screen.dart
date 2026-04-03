@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
 import 'package:provider/provider.dart';
 import 'package:emotion_sense/presentation/providers/history_provider.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:emotion_sense/presentation/screens/image_viewer_screen.dart';
+import 'package:emotion_sense/presentation/widgets/platform_path_image.dart';
 import 'package:intl/intl.dart';
 
 class HistoryScreen extends StatelessWidget {
@@ -113,8 +113,8 @@ class HistoryScreen extends StatelessWidget {
                           ),
                         );
                       },
-                      leading: Image.file(
-                        File(e.imagePath),
+                      leading: PlatformPathImage(
+                        path: e.imagePath,
                         fit: BoxFit.cover,
                         width: 56,
                         height: 56,

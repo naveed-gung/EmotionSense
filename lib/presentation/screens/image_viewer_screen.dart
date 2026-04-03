@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:emotion_sense/presentation/widgets/platform_path_image.dart';
 import 'package:flutter/material.dart';
 
 class ImageViewerScreen extends StatelessWidget {
@@ -20,8 +19,8 @@ class ImageViewerScreen extends StatelessWidget {
         child: InteractiveViewer(
           maxScale: 5,
           minScale: 0.5,
-          child: Image.file(
-            File(path),
+          child: PlatformPathImage(
+            path: path,
             fit: BoxFit.contain,
             errorBuilder: (_, __, ___) =>
                 const Icon(Icons.broken_image, color: Colors.white),
