@@ -160,13 +160,13 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
       }
 
       // Resume detection
-        final resumeDelay = kIsWeb
+      final resumeDelay = kIsWeb
           ? Duration.zero
           : Duration(
-            milliseconds:
-              defaultTargetPlatform == TargetPlatform.iOS ? 500 : 350,
-          );
-        await Future.delayed(resumeDelay);
+              milliseconds:
+                  defaultTargetPlatform == TargetPlatform.iOS ? 500 : 350,
+            );
+      await Future.delayed(resumeDelay);
       if (!mounted) return;
       try {
         await _attrs?.start();

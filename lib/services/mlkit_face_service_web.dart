@@ -16,14 +16,16 @@ class MLKitFaceService {
 
   Future<void> initialize() async {}
 
-  Future<List<MLKitFace>> detectFaces(dynamic image, dynamic camera) async => [];
+  Future<List<MLKitFace>> detectFaces(dynamic image, dynamic camera) async =>
+      [];
 
   String inferEmotion(
     double? smilingProbability,
     double? leftEyeOpen,
     double? rightEyeOpen,
     dynamic face,
-  ) => 'Neutral';
+  ) =>
+      'Neutral';
 
   static double getEmotionConfidence(double? smilingProbability) {
     if (smilingProbability == null) return 0.5;

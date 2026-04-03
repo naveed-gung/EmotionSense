@@ -160,8 +160,9 @@ class MLKitFaceService {
       final bytes = allBytes.done().buffer.asUint8List();
       debugPrint('[MLKit] ✅ Converted ${bytes.length} bytes total');
 
-      final inputFormat =
-          planes.length == 1 ? InputImageFormat.bgra8888 : InputImageFormat.nv21;
+      final inputFormat = planes.length == 1
+          ? InputImageFormat.bgra8888
+          : InputImageFormat.nv21;
 
       final metadata = InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),

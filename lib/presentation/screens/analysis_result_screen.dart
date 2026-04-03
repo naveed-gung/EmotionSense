@@ -85,7 +85,7 @@ class AnalysisResultScreen extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  const SizedBox(width: 44), 
+                  const SizedBox(width: 44),
                 ],
               ),
             ),
