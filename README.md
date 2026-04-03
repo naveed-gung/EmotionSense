@@ -208,4 +208,3 @@ Regenerate icons, then rebuild the target platform so cached launcher assets are
 
 ## License
 
-This repository currently does not expose a dedicated license file in the workspace root. Add one if you want the project to communicate explicit reuse terms.
