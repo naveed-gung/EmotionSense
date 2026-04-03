@@ -10,7 +10,7 @@ import 'package:emotion_sense/utils/image_preprocess.dart';
 import 'package:emotion_sense/utils/image_converter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
-  show TargetPlatform, defaultTargetPlatform, kIsWeb;
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 
 class FaceAttributes {
   FaceAttributes({
@@ -332,11 +332,11 @@ class FaceAttributesProvider extends ChangeNotifier {
         String ethnicity = 'Unknown';
         final shouldRefreshDemographics = _tfliteService.hasAttributes &&
             ((_ageHistoryMap[trackingId]?.isEmpty ?? true) ||
-          _processedFrameCount % _demographicRefreshInterval == 0);
+                _processedFrameCount % _demographicRefreshInterval == 0);
         final shouldRefreshEthnicity = _tfliteService.hasEthnicity &&
             ethnicityEnabled &&
             ((_ethnicityHistoryMap[trackingId]?.isEmpty ?? true) ||
-          _processedFrameCount % _ethnicityRefreshInterval == 0);
+                _processedFrameCount % _ethnicityRefreshInterval == 0);
 
         if (shouldRefreshDemographics) {
           try {
@@ -356,7 +356,7 @@ class FaceAttributesProvider extends ChangeNotifier {
                 hasUV ? (image.planes[1].bytesPerPixel ?? 1) : 1;
             final isBgraFrame =
                 image.format.group == ImageFormatGroup.bgra8888 &&
-                image.planes.isNotEmpty;
+                    image.planes.isNotEmpty;
             final bgraBytes = isBgraFrame ? image.planes.first.bytes : null;
             final bgraRowStride =
                 isBgraFrame ? image.planes.first.bytesPerRow : 0;
@@ -394,7 +394,7 @@ class FaceAttributesProvider extends ChangeNotifier {
             _genderBuffer[trackingId] ??= Float32List(genSz * genSz * 3);
             final genderInput = isBgraFrame
                 ? bgra8888ToRgbInput(
-                bgraBytes!,
+                    bgraBytes!,
                     image.width,
                     image.height,
                     bgraRowStride,
@@ -425,7 +425,7 @@ class FaceAttributesProvider extends ChangeNotifier {
               _ethBuffer[trackingId] ??= Float32List(ethSz * ethSz * 3);
               ethInput = isBgraFrame
                   ? bgra8888ToRgbInput(
-                    bgraBytes!,
+                      bgraBytes!,
                       image.width,
                       image.height,
                       bgraRowStride,
