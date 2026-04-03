@@ -154,6 +154,22 @@ class AnalysisResultScreen extends StatelessWidget {
                               fontSize: 14,
                             ),
                           ),
+                          if (faceData.ageRange.isNotEmpty &&
+                              faceData.ageRange != '-')
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                [
+                                  'Age ${faceData.ageRange.replaceAll('~', '')}',
+                                  if (faceData.gender != 'Unknown')
+                                    faceData.gender,
+                                ].join('  |  '),
+                                style: TextStyle(
+                                  color: AppColors.textTertiary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ],
@@ -174,11 +190,12 @@ class AnalysisResultScreen extends StatelessWidget {
                       ),
                       _Chip(
                         icon: Icons.calendar_today_rounded,
-                        label: faceData.ageRange,
+                        label: faceData.ageRange.replaceAll('~', ''),
                         color: AppColors.accentGold,
                       ),
                       if (faceData.ethnicity != null &&
-                          faceData.ethnicity!.isNotEmpty)
+                          faceData.ethnicity!.isNotEmpty &&
+                          faceData.ethnicity != 'Unknown')
                         _Chip(
                           icon: Icons.public_rounded,
                           label: faceData.ethnicity!,

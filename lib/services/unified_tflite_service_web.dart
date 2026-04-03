@@ -24,11 +24,10 @@ class UnifiedTFLiteService {
     Float32List faceRgbGender, {
     Float32List? faceRgbEthnicity,
   }) async {
-    return Attributes(
-      age: 25,
+    return const Attributes(
+      age: 0,
       gender: 'Unknown',
       ethnicity: 'Unknown',
-      emotion: 'Neutral',
     );
   }
 
@@ -40,13 +39,26 @@ class UnifiedTFLiteService {
 class Attributes {
   final int age;
   final String gender;
+  final double genderConf;
   final String ethnicity;
-  final String emotion;
+  final double ethnicityConf;
 
-  Attributes({
+  const Attributes({
     required this.age,
     required this.gender,
+    this.genderConf = 0.0,
     required this.ethnicity,
-    required this.emotion,
+    this.ethnicityConf = 0.0,
   });
+
+  String get ageRange {
+    if (age < 13) return 'Under 13';
+    if (age < 18) return '13-17';
+    if (age < 25) return '18-24';
+    if (age < 35) return '25-34';
+    if (age < 45) return '35-44';
+    if (age < 55) return '45-54';
+    if (age < 65) return '55-64';
+    return '65+';
+  }
 }

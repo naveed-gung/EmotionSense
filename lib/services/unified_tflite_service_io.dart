@@ -1,7 +1,24 @@
-import 'dart:typed_data';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
+
+List<double> _flatten(dynamic raw) {
+  final out = <double>[];
+
+  void walk(dynamic value) {
+    if (value is List) {
+      for (final entry in value) {
+        walk(entry);
+      }
+      return;
+    }
+    out.add((value as num).toDouble());
+  }
+
+  walk(raw);
+  return out;
+}
 
 class UnifiedTFLiteService {
   Interpreter? _ageModel;
@@ -122,108 +139,131 @@ class UnifiedTFLiteService {
     _genderModel!.run(faceRgbGender.reshape(_genderInputShape), genderOutput);
 
     final age = _parseAge(ageOutput);
-    final gender = _parseGender(genderOutput);
+    final (genderLabel, genderConf) = _parseGender(genderOutput);
 
     String ethnicity = 'Unknown';
+    double ethnicityConf = 0.0;
     if (_ethnicityAvailable &&
         _ethnicityModel != null &&
         faceRgbEthnicity != null) {
       try {
-        ethnicity = await _predictEthnicity(faceRgbEthnicity);
+        (ethnicity, ethnicityConf) = await _predictEthnicity(faceRgbEthnicity);
       } catch (e) {
         debugPrint('[TFLite] Ethnicity prediction error: $e');
       }
     }
 
-    debugPrint('[TFLite] Predicted Age=$age, Gender=$gender, Eth=$ethnicity');
+    debugPrint(
+      '[TFLite] age=$age gender=$genderLabel(${genderConf.toStringAsFixed(2)}) '
+      'eth=$ethnicity(${ethnicityConf.toStringAsFixed(2)})',
+    );
 
     return Attributes(
       age: age,
-      gender: gender,
+      gender: genderLabel,
+      genderConf: genderConf,
       ethnicity: ethnicity,
-      emotion: 'Neutral',
+      ethnicityConf: ethnicityConf,
     );
   }
 
-  Future<String> _predictEthnicity(Float32List faceRgb) async {
+  Future<(String, double)> _predictEthnicity(Float32List faceRgb) async {
     final outTensor = _ethnicityModel!.getOutputTensors()[0];
     final numOutputs = outTensor.numElements();
     final output = List.filled(numOutputs, 0.0).reshape(outTensor.shape);
 
     _ethnicityModel!.run(faceRgb.reshape(_ethnicityInputShape), output);
 
-    final flat = output is List<List> ? output[0] : output;
+    final flat = _flatten(output);
+    debugPrint('[TFLite] ethnicity raw (${flat.length} vals): $flat');
 
-    if (numOutputs >= 5) {
-      int startIdx = 0;
-      if (numOutputs > 5) {
-        startIdx = numOutputs - 5;
-      }
-
-      double maxProb = -1;
-      int maxIdx = 0;
-      for (int i = 0; i < 5; i++) {
-        final prob = (flat[startIdx + i] as num).toDouble();
-        if (prob > maxProb) {
-          maxProb = prob;
-          maxIdx = i;
-        }
-      }
-
-      if (maxIdx < ethnicityLabels.length) {
-        debugPrint(
-            '[TFLite] Ethnicity probs: ${List.generate(5, (i) => '${ethnicityLabels[i]}=${(flat[startIdx + i] as num).toStringAsFixed(3)}')}');
-        return ethnicityLabels[maxIdx];
-      }
-    } else if (numOutputs == 1) {
-      final idx = (flat[0] as num).round().clamp(0, ethnicityLabels.length - 1);
-      return ethnicityLabels[idx];
+    if (flat.isEmpty) {
+      return ('Unknown', 0.0);
     }
 
-    return 'Unknown';
+    if (flat.length == 1) {
+      final idx = flat[0].round().clamp(0, ethnicityLabels.length - 1);
+      return (ethnicityLabels[idx], 0.7);
+    }
+
+    final startIdx = math.max(flat.length - 5, 0);
+    final probs = flat.sublist(startIdx);
+    final sum = probs.fold<double>(0.0, (acc, value) => acc + value);
+
+    List<double> normalized;
+    if (sum < 0.05) {
+      final maxLogit = probs.reduce(math.max);
+      final exps = probs.map((value) => math.exp(value - maxLogit)).toList();
+      final expSum = exps.fold<double>(0.0, (acc, value) => acc + value);
+      normalized = expSum > 0
+          ? exps.map((value) => value / expSum).toList()
+          : List<double>.from(probs);
+    } else {
+      normalized = sum > 1.5
+          ? probs.map((value) => value / sum).toList()
+          : List<double>.from(probs);
+    }
+
+    var maxProb = 0.0;
+    var maxIdx = 0;
+    for (var index = 0;
+        index < normalized.length && index < ethnicityLabels.length;
+        index++) {
+      if (normalized[index] > maxProb) {
+        maxProb = normalized[index];
+        maxIdx = index;
+      }
+    }
+
+    debugPrint(
+      '[TFLite] ethnicity -> ${ethnicityLabels[maxIdx]} '
+      '(${maxProb.toStringAsFixed(3)})',
+    );
+    return (ethnicityLabels[maxIdx], maxProb.clamp(0.0, 1.0));
   }
 
   int _parseAge(List ageOut) {
-    final flat = ageOut is List<List> ? ageOut[0] : ageOut;
-    final rawValue = (flat[0] as num).toDouble();
+    final flat = _flatten(ageOut);
+    if (flat.isEmpty) {
+      return 25;
+    }
 
-    debugPrint('[TFLite] Raw age output: $rawValue');
+    final raw = flat[0];
+    debugPrint('[TFLite] age raw: $raw');
 
     int age;
-    if (rawValue > 1.5) {
-      age = rawValue.round();
-      debugPrint('[TFLite] Age direct: $age');
-    } else if (rawValue >= 0.0 && rawValue <= 1.0) {
-      age = (rawValue * 100.0).round();
-      debugPrint('[TFLite] Age from normalized: $age (raw * 100)');
-    } else if (rawValue < 0) {
-      age = ((rawValue + 1.0) * 50.0).round();
-      debugPrint('[TFLite] Age from negative: $age');
+    if (raw > 1.5) {
+      age = raw.round();
+    } else if (raw >= 0.0 && raw <= 1.0) {
+      age = (raw * 116).round();
     } else {
-      age = rawValue.round();
+      age = ((raw + 1.0) * 58).round();
     }
 
-    return age.clamp(1, 120);
+    age = age.clamp(1, 100);
+    debugPrint('[TFLite] age parsed: $age');
+    return age;
   }
 
-  String _parseGender(List genderOut) {
-    final flat = genderOut is List<List> ? genderOut[0] : genderOut;
-    final numOutputs = flat.length;
-
-    debugPrint('[TFLite] Gender output ($numOutputs values): $flat');
-
-    if (numOutputs >= 2) {
-      final prob0 = (flat[0] as num).toDouble();
-      final prob1 = (flat[1] as num).toDouble();
-
-      debugPrint('[TFLite] Gender probs: Female=$prob0, Male=$prob1');
-
-      return prob1 > prob0 ? 'Male' : 'Female';
-    } else {
-      final prob = (flat[0] as num).toDouble();
-      debugPrint('[TFLite] Gender single output: $prob');
-      return prob > 0.5 ? 'Male' : 'Female';
+  (String, double) _parseGender(List genderOut) {
+    final flat = _flatten(genderOut);
+    debugPrint('[TFLite] gender raw: $flat');
+    if (flat.isEmpty) {
+      return ('Unknown', 0.0);
     }
+
+    if (flat.length >= 2) {
+      final femaleProb = flat[0];
+      final maleProb = flat[1];
+      return maleProb > femaleProb
+          ? ('Male', maleProb.clamp(0.0, 1.0))
+          : ('Female', femaleProb.clamp(0.0, 1.0));
+    }
+
+    final prob = flat[0];
+    return prob > 0.5
+        ? ('Male', prob.clamp(0.0, 1.0))
+        : ('Female', (1 - prob).clamp(0.0, 1.0));
   }
 
   void dispose() {
@@ -249,13 +289,26 @@ class UnifiedTFLiteService {
 class Attributes {
   final int age;
   final String gender;
+  final double genderConf;
   final String ethnicity;
-  final String emotion;
+  final double ethnicityConf;
 
-  Attributes({
+  const Attributes({
     required this.age,
     required this.gender,
+    this.genderConf = 0.0,
     required this.ethnicity,
-    required this.emotion,
+    this.ethnicityConf = 0.0,
   });
+
+  String get ageRange {
+    if (age < 13) return 'Under 13';
+    if (age < 18) return '13-17';
+    if (age < 25) return '18-24';
+    if (age < 35) return '25-34';
+    if (age < 45) return '35-44';
+    if (age < 55) return '45-54';
+    if (age < 65) return '55-64';
+    return '65+';
+  }
 }

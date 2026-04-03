@@ -168,7 +168,9 @@ class _FaceCard extends StatelessWidget {
           _AttrRow(icon: Icons.person_rounded, text: face.gender),
           const SizedBox(height: 6),
           _AttrRow(icon: Icons.calendar_today_rounded, text: face.ageRange),
-          if (face.ethnicity != null && face.ethnicity!.isNotEmpty) ...[
+          if (face.ethnicity != null &&
+              face.ethnicity!.isNotEmpty &&
+              face.ethnicity != 'Unknown') ...[
             const SizedBox(height: 6),
             _AttrRow(icon: Icons.public_rounded, text: face.ethnicity!),
           ],
@@ -246,7 +248,7 @@ class _PoseValue extends StatelessWidget {
     return Column(
       children: [
         Text(
-          '${value}°',
+          '$value°',
           style: TextStyle(
             color: AppColors.primary,
             fontSize: 16,

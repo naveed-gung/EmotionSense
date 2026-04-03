@@ -59,6 +59,7 @@ class FaceAttributesProvider extends ChangeNotifier {
 
   bool _running = false;
   bool _busy = false;
+  bool ethnicityEnabled = true;
   int _skip = 0;
   int targetFps = 8;
   int _notifyThrottle = 0;
@@ -290,8 +291,8 @@ class FaceAttributesProvider extends ChangeNotifier {
         );
 
         String gender = 'Unknown';
-        String ageRange = '~';
-        String? ethnicity = 'Unknown';
+        String ageRange = '-';
+        String ethnicity = 'Unknown';
 
         if (_tfliteService.hasAttributes) {
           try {
@@ -341,7 +342,7 @@ class FaceAttributesProvider extends ChangeNotifier {
             );
 
             Float32List? ethInput;
-            if (_tfliteService.hasEthnicity) {
+            if (_tfliteService.hasEthnicity && ethnicityEnabled) {
               final ethSz = _tfliteService.ethnicityInputSize;
               ethInput = yuvToRgbInput(
                 image.planes[0].bytes,
@@ -387,7 +388,7 @@ class FaceAttributesProvider extends ChangeNotifier {
             }
 
             gender = _getSmoothedGenderFor(trackingId);
-            ageRange = '~${_getSmoothedAgeFor(trackingId)}';
+            ageRange = _getSmoothedAgeRangeFor(trackingId);
             ethnicity = _getSmoothedEthnicityFor(trackingId);
           } catch (e) {
             debugPrint('[FaceProvider] Attribute prediction error: $e');
@@ -484,6 +485,19 @@ class FaceAttributesProvider extends ChangeNotifier {
     return sorted[sorted.length ~/ 2];
   }
 
+  String _getSmoothedAgeRangeFor(int trackingId) {
+    final age = _getSmoothedAgeFor(trackingId);
+    if (age == 0) return '-';
+    if (age < 13) return 'Under 13';
+    if (age < 18) return '13-17';
+    if (age < 25) return '18-24';
+    if (age < 35) return '25-34';
+    if (age < 45) return '35-44';
+    if (age < 55) return '45-54';
+    if (age < 65) return '55-64';
+    return '65+';
+  }
+
   String _getSmoothedGenderFor(int trackingId) {
     final history = _genderHistoryMap[trackingId];
     if (history == null || history.isEmpty) return 'Unknown';
@@ -506,9 +520,10 @@ class FaceAttributesProvider extends ChangeNotifier {
 }
 
 int _rectKey(Rect r) {
-  final l = (r.left * 1000).round();
-  final t = (r.top * 1000).round();
-  final w = (r.width * 1000).round();
-  final h = (r.height * 1000).round();
-  return l ^ (t << 8) ^ (w << 16) ^ (h << 24);
+  var hash = 17;
+  hash = hash * 31 + (r.left * 1000).round();
+  hash = hash * 31 + (r.top * 1000).round();
+  hash = hash * 31 + (r.width * 1000).round();
+  hash = hash * 31 + (r.height * 1000).round();
+  return hash;
 }

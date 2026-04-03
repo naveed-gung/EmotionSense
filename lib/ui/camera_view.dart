@@ -40,6 +40,7 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
 
       final attrs = FaceAttributesProvider(cam.service);
       _attrs = attrs;
+      _attrs!.ethnicityEnabled = settings.ethnicityEnabled;
 
       // Wire emotion alert callback
       _attrs!.onEmotionAlert = (emotion, confidence, faceIndex) {
@@ -95,6 +96,7 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
   }
 
   void _configureAlertFromSettings(SettingsProvider settings) {
+    _attrs?.ethnicityEnabled = settings.ethnicityEnabled;
     final alertEmotionName = settings.alertEmotion;
     if (alertEmotionName.isEmpty) {
       _attrs?.setEmotionAlert(null, 0);
@@ -800,7 +802,9 @@ class _FaceLabelsOverlay extends StatelessWidget {
 
             // Label positioned below the face box
             final labelTop = (faceRect.bottom + 4).clamp(0.0, h - 60);
-            final labelLeft = faceRect.left.clamp(0.0, w - 120);
+            const estLabelW = 200.0;
+            final labelLeft =
+                faceRect.left.clamp(0.0, (w - estLabelW).clamp(0.0, w));
 
             return Positioned(
               left: labelLeft,
@@ -827,7 +831,10 @@ class _FaceLabelsOverlay extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          '${face.emotion.label} · ${face.gender}',
+                          [
+                            face.emotion.label,
+                            if (face.gender != 'Unknown') face.gender,
+                          ].join(' · '),
                           style: const TextStyle(
                             color: AppColors.textPrimary,
                             fontSize: 9,
@@ -835,7 +842,12 @@ class _FaceLabelsOverlay extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${face.ageRange}${face.headEulerAngleY != null ? " · Y${face.headEulerAngleY!.toStringAsFixed(0)}°" : ""}',
+                          [
+                            if (face.ageRange != '-' && face.ageRange != '~')
+                              face.ageRange.replaceAll('~', ''),
+                            if (face.headEulerAngleY != null)
+                              'Y${face.headEulerAngleY!.toStringAsFixed(0)}°',
+                          ].join(' · '),
                           style: TextStyle(
                             color: AppColors.textTertiary,
                             fontSize: 8,
