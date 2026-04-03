@@ -18,12 +18,8 @@ dependencies:
 
   provider: ^6.0.0
 
-  flutter_animate: ^4.5.0
   google_fonts: ^8.0.2
-  audioplayers: ^6.6.0
-  photo_manager: ^3.2.1
   flutter_slidable: ^4.0.3
-  http: ^1.2.0
 
   shared_preferences: ^2.2.2
   permission_handler: ^12.0.1
@@ -58,9 +54,7 @@ flutter_launcher_icons:
 flutter:
   uses-material-design: true
   assets:
-    - assets/icons/
     - assets/models/face_detection_short_range.tflite
     - assets/models/model_lite_age_q.tflite
     - assets/models/model_lite_gender_q.tflite
     - assets/models/age_gender_ethnicity_new.tflite
-    - assets/sounds/

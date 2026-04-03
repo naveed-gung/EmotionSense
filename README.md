@@ -34,8 +34,8 @@ It is designed around three goals:
 | State management | Provider |
 | Face detection | `google_mlkit_face_detection` |
 | ML inference | `tflite_flutter` |
-| Media and storage | `camera`, `photo_manager`, `shared_preferences`, `path_provider` |
-| UI and polish | Material 3, `google_fonts`, `flutter_animate`, `audioplayers` |
+| Media and storage | `camera`, `shared_preferences`, `path_provider` |
+| UI and polish | Material 3, `google_fonts` |
 
 ## Platform Support
 
