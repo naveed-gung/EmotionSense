@@ -17,6 +17,16 @@ class CameraService {
   CameraDescription? get description => _controller?.description;
   Stream<CameraImage> get imageStream => _imageStreamController.stream;
 
+  ImageFormatGroup get _streamImageFormat {
+    if (kIsWeb) {
+      return ImageFormatGroup.unknown;
+    }
+
+    return defaultTargetPlatform == TargetPlatform.iOS
+        ? ImageFormatGroup.bgra8888
+        : ImageFormatGroup.yuv420;
+  }
+
   Future<void> initialize() async {
     final cameras = await availableCameras();
     // Prefer front camera
@@ -26,8 +36,12 @@ class CameraService {
           ? cameras.first
           : throw StateError('No camera found'),
     );
-    _controller =
-        CameraController(front, ResolutionPreset.medium, enableAudio: false);
+    _controller = CameraController(
+      front,
+      ResolutionPreset.medium,
+      enableAudio: false,
+      imageFormatGroup: _streamImageFormat,
+    );
     await _controller!.initialize();
     isInitialized.value = true;
     isFrontCamera.value =
@@ -47,8 +61,12 @@ class CameraService {
       orElse: () => _controller!.description,
     );
     await _controller?.dispose();
-    _controller =
-        CameraController(target, ResolutionPreset.medium, enableAudio: false);
+    _controller = CameraController(
+      target,
+      ResolutionPreset.medium,
+      enableAudio: false,
+      imageFormatGroup: _streamImageFormat,
+    );
     await _controller!.initialize();
     isFrontCamera.value = targetDirection == CameraLensDirection.front;
   }

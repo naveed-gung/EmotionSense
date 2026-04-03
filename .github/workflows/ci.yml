@@ -1,0 +1,70 @@
+name: Build Mobile Artifacts
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build unsigned IPA
+        run: flutter build ipa --release --no-codesign
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Prepare renamed artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          ipa_path="$(find build/ios/ipa -maxdepth 1 -name '*.ipa' | head -n 1)"
+          if [[ -z "$ipa_path" ]]; then
+            echo "IPA file not found in build/ios/ipa"
+            exit 1
+          fi
+          cp "$ipa_path" dist/emotion-sense.ipa
+
+          apk_path="build/app/outputs/flutter-apk/app-release.apk"
+          if [[ ! -f "$apk_path" ]]; then
+            echo "APK file not found at $apk_path"
+            exit 1
+          fi
+          cp "$apk_path" dist/emotion-sense.apk
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emotion-sense-ipa
+          path: dist/emotion-sense.ipa
+          if-no-files-found: error
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emotion-sense-apk
+          path: dist/emotion-sense.apk
+          if-no-files-found: error

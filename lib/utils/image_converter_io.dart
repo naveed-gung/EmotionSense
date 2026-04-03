@@ -14,6 +14,25 @@ class ImageConverter {
 
       final imageSize = Size(image.width.toDouble(), image.height.toDouble());
 
+      if (image.format.group == ImageFormatGroup.bgra8888 &&
+          image.planes.isNotEmpty) {
+        final plane = image.planes.first;
+        final metadata = InputImageMetadata(
+          size: imageSize,
+          rotation: imageRotation,
+          format: InputImageFormat.bgra8888,
+          bytesPerRow: plane.bytesPerRow,
+        );
+
+        print(
+          '📸 Converting BGRA8888 image: ${image.width}x${image.height}, '
+          'Rotation: ${imageRotation.name}, '
+          'Format: BGRA8888',
+        );
+
+        return InputImage.fromBytes(bytes: plane.bytes, metadata: metadata);
+      }
+
       if (image.format.group == ImageFormatGroup.yuv420) {
         final Uint8List? nv21Buffer = _yuv420toNV21(image);
         if (nv21Buffer == null) {
