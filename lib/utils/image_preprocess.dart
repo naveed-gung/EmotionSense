@@ -15,6 +15,30 @@ enum NormalizationMode {
   none,
 }
 
+void _writeNormalizedRgb(
+  Float32List out,
+  int outIdx,
+  double r,
+  double g,
+  double b,
+  NormalizationMode mode,
+) {
+  switch (mode) {
+    case NormalizationMode.standard:
+      out[outIdx] = r / 255.0;
+      out[outIdx + 1] = g / 255.0;
+      out[outIdx + 2] = b / 255.0;
+    case NormalizationMode.mobilenet:
+      out[outIdx] = (r - 127.5) / 128.0;
+      out[outIdx + 1] = (g - 127.5) / 128.0;
+      out[outIdx + 2] = (b - 127.5) / 128.0;
+    case NormalizationMode.none:
+      out[outIdx] = r;
+      out[outIdx + 1] = g;
+      out[outIdx + 2] = b;
+  }
+}
+
 /// Convert Y plane to grayscale Float32 input [1, H, W, 1] flattened
 /// normalized by /255 for model input. Returns a flat Float32List size H*W.
 Float32List yuvToGrayscaleInput(
@@ -102,21 +126,59 @@ Float32List yuvToRgbInput(
       g = g.clamp(0.0, 255.0);
       b = b.clamp(0.0, 255.0);
 
-      switch (mode) {
-        case NormalizationMode.standard:
-          out[outIdx++] = r / 255.0;
-          out[outIdx++] = g / 255.0;
-          out[outIdx++] = b / 255.0;
-        case NormalizationMode.mobilenet:
-          out[outIdx++] = (r - 127.5) / 128.0;
-          out[outIdx++] = (g - 127.5) / 128.0;
-          out[outIdx++] = (b - 127.5) / 128.0;
-        case NormalizationMode.none:
-          out[outIdx++] = r;
-          out[outIdx++] = g;
-          out[outIdx++] = b;
-      }
+      _writeNormalizedRgb(out, outIdx, r, g, b, mode);
+      outIdx += 3;
     }
   }
+  return out;
+}
+
+/// Convert BGRA8888 bytes to RGB Float32 input [1, H, W, 3] flattened.
+/// Used by iOS camera streams where frames arrive as a single BGRA plane.
+Float32List bgra8888ToRgbInput(
+  Uint8List bgraBytes,
+  int width,
+  int height,
+  int bytesPerRow,
+  Rect bb,
+  int outW,
+  int outH, {
+  NormalizationMode mode = NormalizationMode.standard,
+  Float32List? outBuffer,
+}) {
+  final left = bb.left.clamp(0.0, width.toDouble()).toInt();
+  final top = bb.top.clamp(0.0, height.toDouble()).toInt();
+  final right = (bb.right.clamp(0.0, width.toDouble())).toInt();
+  final bottom = (bb.bottom.clamp(0.0, height.toDouble())).toInt();
+  final cropW = math.max(1, right - left);
+  final cropH = math.max(1, bottom - top);
+
+  final needed = outH * outW * 3;
+  final out = (outBuffer != null && outBuffer.length == needed)
+      ? outBuffer
+      : Float32List(needed);
+
+  int outIdx = 0;
+  for (int oy = 0; oy < outH; oy++) {
+    final sy = top + (oy * cropH / outH).floor();
+    for (int ox = 0; ox < outW; ox++) {
+      final sx = left + (ox * cropW / outW).floor();
+      final pixelIndex = sy * bytesPerRow + sx * 4;
+
+      double r = 0.0;
+      double g = 0.0;
+      double b = 0.0;
+
+      if (pixelIndex + 2 < bgraBytes.length) {
+        b = bgraBytes[pixelIndex].toDouble();
+        g = bgraBytes[pixelIndex + 1].toDouble();
+        r = bgraBytes[pixelIndex + 2].toDouble();
+      }
+
+      _writeNormalizedRgb(out, outIdx, r, g, b, mode);
+      outIdx += 3;
+    }
+  }
+
   return out;
 }

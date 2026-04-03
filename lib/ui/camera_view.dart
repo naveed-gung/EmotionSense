@@ -27,11 +27,12 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
   bool _isCapturing = false;
   String? _alertMessage;
 
-  void _applyRuntimeSettings(SettingsProvider settings) {
+  Future<void> _applyRuntimeSettings(SettingsProvider settings) async {
     if (_attrs == null) return;
     _attrs!.ethnicityEnabled = settings.ethnicityEnabled;
     _attrs!.targetFps = settings.targetFps;
     _attrs!.fastEmotionResponse = settings.fastEmotionResponse;
+    await _attrs!.setModelMode(settings.modelMode);
     _configureAlertFromSettings(settings);
   }
 
@@ -48,7 +49,7 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
 
       final attrs = FaceAttributesProvider(cam.service);
       _attrs = attrs;
-      _applyRuntimeSettings(settings);
+      await _applyRuntimeSettings(settings);
 
       // Wire emotion alert callback
       _attrs!.onEmotionAlert = (emotion, confidence, faceIndex) {
@@ -440,7 +441,7 @@ class _CameraViewState extends State<CameraView> with WidgetsBindingObserver {
               );
               // Reconfigure alerts after returning from settings
               if (mounted && _attrs != null) {
-                _applyRuntimeSettings(context.read<SettingsProvider>());
+                await _applyRuntimeSettings(context.read<SettingsProvider>());
                 setState(() {});
               }
             },

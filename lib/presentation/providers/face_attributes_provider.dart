@@ -9,7 +9,8 @@ import 'package:emotion_sense/services/unified_tflite_service.dart';
 import 'package:emotion_sense/utils/image_preprocess.dart';
 import 'package:emotion_sense/utils/image_converter.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+  show TargetPlatform, defaultTargetPlatform, kIsWeb;
 
 class FaceAttributes {
   FaceAttributes({
@@ -63,8 +64,10 @@ class FaceAttributesProvider extends ChangeNotifier {
   bool fastEmotionResponse = false;
   int _skip = 0;
   int targetFps = 8;
+  String _modelMode = 'accuracy';
   int _notifyThrottle = 0;
   int _lastFaceCount = 0;
+  int _processedFrameCount = 0;
   final Map<int, double> _emaConfidence = {};
   final double _emaAlpha = 0.4;
   StreamSubscription<CameraImage>? _imageStreamSubscription;
@@ -91,6 +94,24 @@ class FaceAttributesProvider extends ChangeNotifier {
   int get _emotionHistoryLength => fastEmotionResponse ? 3 : 5;
   double get _emotionMajorityRatio => fastEmotionResponse ? 0.34 : 0.5;
 
+  bool get _isIos => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+  int get _demographicRefreshInterval {
+    if (_modelMode == 'speed') {
+      return _isIos ? 4 : 2;
+    }
+
+    return _isIos ? 6 : 3;
+  }
+
+  int get _ethnicityRefreshInterval {
+    if (_modelMode == 'speed') {
+      return _isIos ? 10 : 6;
+    }
+
+    return _isIos ? 14 : 8;
+  }
+
   // Emotion alert callback
   void Function(Emotion emotion, double confidence, int faceIndex)?
       onEmotionAlert;
@@ -100,6 +121,12 @@ class FaceAttributesProvider extends ChangeNotifier {
   void setEmotionAlert(Emotion? emotion, double threshold) {
     _alertEmotion = emotion;
     _alertThreshold = threshold;
+  }
+
+  Future<void> setModelMode(String mode) async {
+    if (_modelMode == mode) return;
+    _modelMode = mode;
+    await _tfliteService.setPerformanceMode(mode);
   }
 
   Future<void> start() async {
@@ -199,6 +226,7 @@ class FaceAttributesProvider extends ChangeNotifier {
     _busy = true;
     _frameStopwatch.reset();
     _frameStopwatch.start();
+    _processedFrameCount++;
 
     try {
       if (!_mlkitService.isInitialized) return;
@@ -302,8 +330,15 @@ class FaceAttributesProvider extends ChangeNotifier {
         String gender = 'Unknown';
         String ageRange = '-';
         String ethnicity = 'Unknown';
+        final shouldRefreshDemographics = _tfliteService.hasAttributes &&
+            ((_ageHistoryMap[trackingId]?.isEmpty ?? true) ||
+          _processedFrameCount % _demographicRefreshInterval == 0);
+        final shouldRefreshEthnicity = _tfliteService.hasEthnicity &&
+            ethnicityEnabled &&
+            ((_ethnicityHistoryMap[trackingId]?.isEmpty ?? true) ||
+          _processedFrameCount % _ethnicityRefreshInterval == 0);
 
-        if (_tfliteService.hasAttributes) {
+        if (shouldRefreshDemographics) {
           try {
             final cropBb = _transformBboxToRawFrame(
               face.boundingBox,
@@ -319,59 +354,101 @@ class FaceAttributesProvider extends ChangeNotifier {
             final uvRowStride = hasUV ? image.planes[1].bytesPerRow : 0;
             final uvPixelStride =
                 hasUV ? (image.planes[1].bytesPerPixel ?? 1) : 1;
+            final isBgraFrame =
+                image.format.group == ImageFormatGroup.bgra8888 &&
+                image.planes.isNotEmpty;
+            final bgraBytes = isBgraFrame ? image.planes.first.bytes : null;
+            final bgraRowStride =
+                isBgraFrame ? image.planes.first.bytesPerRow : 0;
 
             final ageSz = _tfliteService.ageInputSize;
             _ageBuffer[trackingId] ??= Float32List(ageSz * ageSz * 3);
-            final ageInput = yuvToRgbInput(
-              image.planes[0].bytes,
-              uBytes,
-              vBytes,
-              image.width,
-              image.height,
-              uvRowStride,
-              uvPixelStride,
-              cropBb,
-              ageSz,
-              ageSz,
-              mode: NormalizationMode.standard,
-              outBuffer: _ageBuffer[trackingId],
-            );
+            final ageInput = isBgraFrame
+                ? bgra8888ToRgbInput(
+                    bgraBytes!,
+                    image.width,
+                    image.height,
+                    bgraRowStride,
+                    cropBb,
+                    ageSz,
+                    ageSz,
+                    mode: NormalizationMode.standard,
+                    outBuffer: _ageBuffer[trackingId],
+                  )
+                : yuvToRgbInput(
+                    image.planes[0].bytes,
+                    uBytes,
+                    vBytes,
+                    image.width,
+                    image.height,
+                    uvRowStride,
+                    uvPixelStride,
+                    cropBb,
+                    ageSz,
+                    ageSz,
+                    mode: NormalizationMode.standard,
+                    outBuffer: _ageBuffer[trackingId],
+                  );
 
             final genSz = _tfliteService.genderInputSize;
             _genderBuffer[trackingId] ??= Float32List(genSz * genSz * 3);
-            final genderInput = yuvToRgbInput(
-              image.planes[0].bytes,
-              uBytes,
-              vBytes,
-              image.width,
-              image.height,
-              uvRowStride,
-              uvPixelStride,
-              cropBb,
-              genSz,
-              genSz,
-              mode: NormalizationMode.standard,
-              outBuffer: _genderBuffer[trackingId],
-            );
+            final genderInput = isBgraFrame
+                ? bgra8888ToRgbInput(
+                bgraBytes!,
+                    image.width,
+                    image.height,
+                    bgraRowStride,
+                    cropBb,
+                    genSz,
+                    genSz,
+                    mode: NormalizationMode.standard,
+                    outBuffer: _genderBuffer[trackingId],
+                  )
+                : yuvToRgbInput(
+                    image.planes[0].bytes,
+                    uBytes,
+                    vBytes,
+                    image.width,
+                    image.height,
+                    uvRowStride,
+                    uvPixelStride,
+                    cropBb,
+                    genSz,
+                    genSz,
+                    mode: NormalizationMode.standard,
+                    outBuffer: _genderBuffer[trackingId],
+                  );
 
             Float32List? ethInput;
-            if (_tfliteService.hasEthnicity && ethnicityEnabled) {
+            if (shouldRefreshEthnicity) {
               final ethSz = _tfliteService.ethnicityInputSize;
               _ethBuffer[trackingId] ??= Float32List(ethSz * ethSz * 3);
-              ethInput = yuvToRgbInput(
-                image.planes[0].bytes,
-                uBytes,
-                vBytes,
-                image.width,
-                image.height,
-                uvRowStride,
-                uvPixelStride,
-                cropBb,
-                ethSz,
-                ethSz,
-                mode: NormalizationMode.standard,
-                outBuffer: _ethBuffer[trackingId],
-              );
+              ethInput = isBgraFrame
+                  ? bgra8888ToRgbInput(
+                    bgraBytes!,
+                      image.width,
+                      image.height,
+                      bgraRowStride,
+                      cropBb,
+                      ethSz,
+                      ethSz,
+                      mode: NormalizationMode.standard,
+                      outBuffer: _ethBuffer[trackingId],
+                    )
+                  : yuvToRgbInput(
+                      image.planes[0].bytes,
+                      uBytes,
+                      vBytes,
+                      image.width,
+                      image.height,
+                      uvRowStride,
+                      uvPixelStride,
+                      cropBb,
+                      ethSz,
+                      ethSz,
+                      mode: NormalizationMode.standard,
+                      outBuffer: _ethBuffer[trackingId],
+                    );
             }
 
             final attrs = await _tfliteService.predictAttributes(
@@ -387,7 +464,7 @@ class FaceAttributesProvider extends ChangeNotifier {
 
             _ageHistoryMap[trackingId]!.add(attrs.age);
             _genderHistoryMap[trackingId]!.add(attrs.gender);
-            if (attrs.ethnicity != 'Unknown') {
+            if (shouldRefreshEthnicity && attrs.ethnicity != 'Unknown') {
               _ethnicityHistoryMap[trackingId]!.add(attrs.ethnicity);
             }
             if (_ageHistoryMap[trackingId]!.length > attributeHistoryLength) {
@@ -408,6 +485,16 @@ class FaceAttributesProvider extends ChangeNotifier {
           } catch (e) {
             debugPrint('[FaceProvider] Attribute prediction error: $e');
           }
+        }
+
+        if (_ageHistoryMap[trackingId]?.isNotEmpty ?? false) {
+          ageRange = _getSmoothedAgeRangeFor(trackingId);
+        }
+        if (_genderHistoryMap[trackingId]?.isNotEmpty ?? false) {
+          gender = _getSmoothedGenderFor(trackingId);
+        }
+        if (_ethnicityHistoryMap[trackingId]?.isNotEmpty ?? false) {
+          ethnicity = _getSmoothedEthnicityFor(trackingId);
         }
 
         final key = _rectKey(rect);
